@@ -1,0 +1,418 @@
+---
+title: "modified_weibull"
+output: html_document
+date: "2025-03-03"
+---
+
+# log(x) -- log(x + f)
+```{r}
+"modified_weibull1" <- function(
+fixed = c(NA, NA, NA, NA, NA), 
+# the purpose of this parameter is to specify the fixed parameters in the function
+# NA indicates the parameter needs to be estimated.
+# If a numerical number replaces an NA, the corresponding parameter will be fixed during the fitting process and will not be estimated.
+
+names = c("b", "c", "d", "e", "f"), 
+# define the names of parameters in the equation
+# By default, (weibull) names are b, c, d, e, which typically represent:
+# b, the steepness of the curve (shape parameter)
+# c, the minimum response value (lower limit)
+# d, the maximum response value (upper limit)
+# e, the medium effective dose (ED50)
+
+method = c("1", "2", "3", "4"),
+# specify the calculation method for the equation. The available options "1","2","3","4" typically represent different mathematical implementations. The function may internally choose the first option as the default.
+# "1", Standard Nonlinear Least Squares (NLS) Estimation: use nonlinear regression least squares regression to estimate parameters; Minimizes the sum of squared residuals(differences between observed and predicted values); sensitive to starting values and local minima
+# "2", Maximum Likelihood Estimate(MLE): Estimate parameters by maximizing the likelihood function; Provide more robust parameter estimation when dealing with variability in data; Often preferred when the response variable follows a known probability distribution
+# "3", Bayesian Estimation or Robust Regression: Could refer to Bayesian approaches for parameter estimation; Uses prior distributions and likelihood to estimate parameters; More stable in cases and with limited data or high noise
+# "4", Generalized Nonlinear Regression or Alternative Optimization Algorithm: Might use alternative numerical methods(such as: Gradient descent, Trust-region method, Genetic algorithms for global optimization); Designed to improve convergence in difficult cases
+
+ssfct = NULL,
+# ssfct, starting sample function. Its purpose is to provide initial parameter values for thr model.
+# NULL, "empty" or "undefined", means that no custom starting parameter function is provided.
+# The function may use a default method to calculate starting values (eg. random initialization); Or the fitting process relies on R's default optimization algorithm to determine initial values.
+
+fctName, fctText)
+# store the name of function; store the text description of function
+
+{
+    ## Checking arguments
+    numParm <- 5 # indicating that the function has 5 parameters
+    if (!is.character(names) | !(length(names)==numParm)) {stop("Not correct 'names' argument")}
+    # check if "names" is a character vector and if it has 4 elements
+    # if these conditions are not met, stop
+    if (!(length(fixed)==numParm)) {stop("Not correct 'fixed' argument")}
+    
+#    if (!is.logical(useD)) {stop("Not logical useD argument")}
+#    if (useD) {stop("Derivatives not available")}
+
+    notFixed <- is.na(fixed)
+    # is.na(fixed) returns a logical vector, indicating which parameters need to be estimated(NA) and which are fixed
+    # eg. Output: c(TRUE, TRUE, TRUE, TRUE), TRUE means the parameter needs to be estimated (not fixed)
+    parmVec <- rep(0, numParm) 
+    # create a zero vector of length 4, c(0,0,0,0). 
+    # The function rep() in R is used to replicate elements of a vector or a value. rep(x, times)
+    parmVec[!notFixed] <- fixed[!notFixed]
+    # notFixed is a TRUE/FALSE logical vector. !notFixed inverts it, identifying positions of fixed parameters.
+    # parmVec assigns values from fixed only to the fixed parameter positions.
+    parmVec1 <- parmVec
+    parmVec2 <- parmVec 
+    # Copies parmVec, possibly for different steps in the computation
+    
+    
+    ## Defining the non-linear function
+    fct <- function(dose, parm)
+    # Defines a function fct to compute the output of the Weibull equation.
+    # two input. dose: The dose (independent variable); parm: A parameter vector (containing estimated parameters).
+    {
+        parmMat <- matrix(parmVec, nrow(parm), numParm, byrow = TRUE)
+        parmMat[, notFixed] <- parm # Updating parmMat with parm Values
+        # parmMat is a matrix used to store parameter values. matrix(data, nrow, ncol, byrow = TRUE)
+        # parmVec: The previously initialized parameter vector (including fixed parameter values).
+        # nrow(parm): Ensures the number of rows matches the number of parm data points.
+        # numParm = 5: Ensures the number of columns matches the number of parameters (b, c, d, e, f)
+        # byrow = TRUE: Fills the matrix row by row (each row represents a set of parameters)
+        # notFixed is a logical vector indicating which parameters need to be estimated (NA) and which are fixed.
+        # This step updates the estimable parameters, keeping fixed parameters unchanged.
+    
+        parmMat[, 2] + (parmMat[, 3] - parmMat[, 2]) * exp( -exp(parmMat[, 1] *(log(dose + parmMat[, 5]) - log(parmMat[, 4])))) #Computing the Function using updated parameters
+    }
+
+
+#    ## Defining value for control measurements (dose=0)
+#    confct <- function(drcSign)
+#    {
+#        if (drcSign>0) {conPos <- 2} else {conPos <- 3}
+#        confct2 <- function(parm)
+#        { 
+#            parmMat <- matrix(parmVec, nrow(parm), numParm, byrow = TRUE)
+#            parmMat[, notFixed] <- parm
+#            parmMat[, conPos]
+#        }
+#        return(list(pos = conPos, fct = confct2))
+#    }
+
+
+#    ## Defining flag to indicate if more general ANOVA model
+##    anovaYes <- list(bin = !any(is.na(fixed[c(2,3)])) , cont = TRUE)
+#    binVar <- all(fixed[c(2, 3)]==c(0, 1))
+#    if (is.na(binVar)) {binVar <- FALSE}
+#    if (!binVar) {binVar <- NULL}    
+#    anovaYes <- list(bin = binVar, cont = TRUE)
+
+
+    ## Defining the self starter function (no custom starting value). It computes starting values for Weibull function parameters before the nonlinear fitting process.
+
+    ssfct <- function(dataFra)
+    # This function takes dataFra (a dataframe containing dose-response data) as input.
+    {
+        dose2 <- dataFra[, 1] # Extracts dose values (dose2) from the first column of dataFra.
+        resp3 <- dataFra[, 2] # Extracts response values (resp3) from the second column.
+
+        startVal <- rep(0, numParm) # This vector will later store estimated values for Weibull parameters (b, c, d, e).
+
+        # If c is not fixed (NA), it is estimated as the minimum response value.
+        if (is.na(fixed[2]))
+        {
+            startVal[2] <- min(resp3)  # the lower bound
+        } else {
+            startVal[2] <- fixed[2]
+        }
+        
+        # If d is not fixed, it is estimated as the maximum response value.
+        if (is.na(fixed[3]))
+        {
+            startVal[3] <- max(resp3)  # the upper bound
+        } else {
+            startVal[3] <- fixed[3]
+        }
+        
+        # if f is not fixed, just to keep (x + f)>0
+        if (is.na(fixed[5]))
+        {
+          if (min(dose2) > 0) {startVal[5] <- 0}
+          else {startVal[5] <- (1 - min(dose2))}
+        } else {
+            startVal[5] <- fixed[5]
+        }
+        
+        if (length(unique(dose2))==1) {return((c(NA, NA, startVal[3], NA, startVal[5]))[notFixed])}  
+        # only estimate of upper limit if a single unique dose value 
+
+        # If all dose values are zero or negative, the function returns NA for all parameters.
+        # Filters out non-positive dose values.
+        # indexT2 <- (dose2 + startVal[5]>0)
+        # if (!any(indexT2)) {return((rep(NA, numParm))[notFixed])}  # for negative dose value
+        # dose3 <- dose2[indexT2]
+        # resp3 <- resp3[indexT2]
+        dose3 <- dose2
+
+#        loglogTrans <- log(-log((resp3-startVal[2] + 0.001)/(startVal[3]-startVal[2])))  # 0.001 to avoid 0 as argument to log
+        
+#        loglogTrans <- log(-log(abs(resp3 - startVal[2] - startVal[3]/((pi*pi)^2))/(startVal[3] - startVal[2])))
+        loglogTrans <- log(-log((resp3 - startVal[2])/(startVal[3] - startVal[2])))
+        # (resp3 - startVal[2])/(startVal[3] - startVal[2]) normalizes the response between 0 and 1.
+        # The log(-log(...)) transformation linearizes the Weibull function, making it easier to estimate parameters using linear regression.
+
+        # Filters out infinite values in loglogTrans (to prevent errors in regression).
+        isFin <- is.finite(loglogTrans)
+        loglogTrans <- loglogTrans[isFin]
+        dose3 <- dose3[isFin]
+
+#        print(resp3)
+#        print(loglogTrans)
+#        print(log(dose3))
+        loglogFit <- lm(loglogTrans ~ log(dose3 + startVal[5])) # performs a linear regression
+        
+        # e=exp(−Intercept/Slope)
+        if (is.na(fixed[4]))
+        {
+            startVal[4] <- exp(-coef(loglogFit)[1]/coef(loglogFit)[2])  # the e parameter
+        } else {
+            startVal[4] <- fixed[4]
+        }       
+#        startVal[4] <- exp(-coef(loglogFit)[1]/coef(loglogFit)[2])  # the e parameter
+
+        if (is.na(fixed[1]))
+        {
+            startVal[1] <- coef(loglogFit)[2]  # the b parameter
+        } else {
+            startVal[1] <- fixed[1]
+        }       
+#        startVal[1] <- coef(loglogFit)[2]  # the b parameter, the slope of regression
+
+
+        ## Avoiding 0 as start value for lower limit (convergence will fail)
+        # If c is close to 0, (resp - c) / (d - c) can also close to 0, log(0) cannot be defined
+        if ( startVal[2] < 1e-12 ) {startVal[2] <- startVal[3]/10}
+
+#        print(startVal)  
+        return(startVal[notFixed])
+    }
+
+    # only when (1) all dose levels are the same (2) outcomes of loglogTrans are all Inf or -Inf, ssfct can be empty. It cannot happen so I did not reset weibull1.ssf()
+    if (!is.null(ssfct))
+    {
+        ssfct <- ssfct  # in case it is explicitly provided
+    } else {
+        ssfct <- weibull1.ssf(method, fixed)
+    }
+    
+
+   
+    ## Defining names, Retains only the non-fixed parameter names.
+    names <- names[notFixed]
+
+
+#    ## Defining parameter to be scaled
+#    if ( (scaleDose) && (is.na(fixed[4])) ) 
+#    {
+#        scaleInd <- sum(is.na(fixed[1:4]))
+#    } else {
+#        scaleInd <- NULL
+#    }
+    
+
+    ## Defining derivatives
+    ## Defining derivatives
+    # This function computes the first-order derivative of the Weibull dose-response curve with respect to parameters.
+    deriv1 <- function(dose, parm)
+              {
+                  parmMat <- matrix(parmVec, nrow(parm), numParm, byrow=TRUE)
+                  parmMat[, notFixed] <- parm
+
+                  t1 <- parmMat[, 3] - parmMat[, 2] # d - c
+                  t2 <- exp(parmMat[, 1]*(log(dose + parmMat[, 5]) - log(parmMat[, 4])))
+                  t3 <- exp(-t2)
+
+                  derMat <- as.matrix(cbind( -t1 * divAtInf(xlogx(dose + parmMat[, 5]/parmMat[, 4], parmMat[, 1]), exp(t2)), # Derivative with respect to b
+                                             # divAtInf(numerator, denominator). If denominator is extremely large (Inf), the function returns 0 instead of causing a numerical error. Otherwise, it safely returns numerator / denominator.
+                                             # xlogx(x, b) is a function: x>0, calculate normally; x=<0, return 0
+                                             1 - t3, # Derivative with respect to c
+                                             t3, # Derivative with respect to d
+                                             t1 * divAtInf(t2, exp(t2)) * parmMat[, 1]/parmMat[, 4], # Derivative with respect to e
+                                             t1 * divAtInf(t2, exp(t2)) * (-parmMat[, 1] / (dose + parmMat[, 5])))) # Derivative with respect to f
+                  return(derMat[, notFixed])
+              }
+    deriv2 <- NULL # second-order derivative, undefined.
+
+    
+    ## Defining the first derivative (in x=dose)
+    ##  based on deriv(~c+(d-c)*(exp(-exp(b*(log(x + f)-log(e))))), "x", function(x, b,c,d,e,f){})
+    derivx <- function(x, parm)
+    {
+      parmMat <- matrix(parmVec, nrow(parm), numParm, byrow = TRUE)
+      parmMat[, notFixed] <- parm
+
+      .expr1 <- parmMat[, 3] - parmMat[, 2]  # d - c
+      .expr6 <- exp(parmMat[, 1] * (log(x + parmMat[, 5]) - log(parmMat[, 4])))
+      .expr8 <- exp(-.expr6)
+      .value <- parmMat[, 2] + .expr1 * .expr8
+      .grad <- array(0, c(length(.value), 1L), list(NULL, c("x")))
+      .grad[, "x"] <- -(.expr1 * (.expr8 * (.expr6 * (parmMat[, 1] * (1/x + parmMat[, 5])))))
+      .grad
+    }
+    # .grad <- array(0, c(length(.value), 1L), list(NULL, c("x"))), Create an array filled with zeros
+    # c(length(.value), 1L): Defines the size of the array; length(.value): Represents the number of x values; 1L: Indicates that the array has only one column (since the derivative is computed for a single variable, x).
+    # list(NULL, c("x")): Assigns a column name, indicating that this array stores the gradient (derivative) with respect to x.
+    
+#    ## Limits
+#    if (length(lowerc)==numParm) {lowerLimits <- lowerc[notFixed]} else {lowerLimits <- lowerc}
+#    if (length(upperc)==numParm) {upperLimits <- upperc[notFixed]} else {upperLimits <- upperc}
+
+
+    ## Defining the ED function
+    edfct <- function(parm, respl, reference, type, ...)  # function(parm, p, reference, type, ...)
+    # parm: Vector of non-fixed model parameters; respl: The response level; reference: The reference level('control','absolute'); type: the calculate method('relative','absolute')
+    {        
+        parmVec[notFixed] <- parm
+        p <- EDhelper(parmVec, respl, reference, type) # respl = 90, means ED90; respl = 50, means ED50. determind by researcher
+        
+#        if (type == "absolute") {p <- 100*((parmVec[3] - p)/(parmVec[3] - parmVec[2]))}
+#        if ( (parmVec[1] < 0) && (reference == "control") ) {p <- 100 - p}
+    
+        tempVal <- log(-log((100-p)/100))
+        # log-log transformation, used for ED estimation
+        # The inner fraction (100-p)/100) represents the proportion of the response left.
+        EDp <- exp(tempVal/parmVec[1] + log(parmVec[4])) - parmVec[5] # This formula solves for x (dose) at a given response level.
+        # The step is derived from the inverse transformation of the Weibull dose-response model.
+
+        EDder <- EDp*c(-tempVal/(parmVec[1]^2), 0, 0, 1/parmVec[4], -1)
+        # Each element inside c(...) corresponds to the partial derivative of EDp with respect to a Weibull parameter.
+        # Used for optimization, confidence intervals, and error estimation in dose-response modeling.
+    
+        return(list(EDp, EDder[notFixed]))
+    }
+
+#
+#    ## Defining the SI function
+#    sifct <- function(parm1, parm2, pair)
+#    {
+#        parmVec1[notFixed] <- parm1
+#        parmVec2[notFixed] <- parm2
+#
+#        tempVal1 <- log(-log((100-pair[1])/100))
+#        tempVal2 <- log(-log((100-pair[2])/100))
+#    
+#        SIpair <- exp(tempVal1/parmVec1[1] + log(parmVec1[4]))/exp(tempVal2/parmVec2[1] + log(parmVec2[4]))
+#    
+#        SIder1 <- SIpair*c(-tempVal1/(parmVec1[1]*parmVec1[1]), 0, 0, 1/parmVec1[4])
+#        SIder2 <- SIpair*c(tempVal2/(parmVec2[1]*parmVec2[1]), 0, 0, -1/parmVec2[4])
+#    
+#        return(list(SIpair, SIder1[notFixed], SIder2[notFixed]))
+#    }
+    
+    # construct a list (returnList) containing functions and parameters related to a Weibull dose-response model
+    returnList <- 
+    list(fct = fct, ssfct = ssfct, names = names, deriv1 = deriv1, deriv2 = deriv2, derivx = derivx, edfct = edfct, 
+#    lowerc=lowerLimits, upperc=upperLimits, confct=confct, anovaYes=anovaYes, 
+#    scaleInd = scaleInd,
+    name = ifelse(missing(fctName), as.character(match.call()[[1]]), fctName),
+    text = ifelse(missing(fctText), "modified_Weibull (type 1)", fctText),     
+    noParm = sum(is.na(fixed)),
+    fixed = fixed)
+
+    class(returnList) <- "modified_Weibull-1"
+    # This assigns the class "Weibull-1" to the list.
+    # This allows returnList to be treated as a custom object for Weibull-type dose-response functions.
+    # R can apply specific S3 methods (such as print() and summary()) to this object.
+    invisible(returnList)
+    # This ensures that returnList is returned but does not print automatically in the console.
+}
+
+
+# "W1.2" <-
+# function(upper = 1, fixed = c(NA, NA), names = c("b", "e"), ...)
+# {
+#     ## Checking arguments
+#     numParm <- 2
+#     if (!is.character(names) | !(length(names) == numParm)) {stop("Not correct 'names' argument")}
+#     if (!(length(fixed) == numParm)) {stop("Not correct length of 'fixed' argument")}
+# 
+#     return(weibull1(fixed = c(fixed[1], 0, upper, fixed[2]), names = c(names[1], "c", "d", names[2]),
+#     fctName = as.character(match.call()[[1]]), 
+#     fctText = lowupFixed("Weibull (type 1)", upper), ...))
+# }
+# 
+# w2 <- W1.2
+
+# "W1.3" <-
+# function(fixed = c(NA, NA, NA), names = c("b", "d", "e"), ...)
+# {
+#     ## Checking arguments
+#     numParm <- 3
+#     if (!is.character(names) | !(length(names) == numParm)) {stop("Not correct 'names' argument")}
+#     if (!(length(fixed) == numParm)) {stop("Not correct length of 'fixed' argument")}
+# 
+#     return(weibull1(fixed = c(fixed[1], 0, fixed[2:3]), names = c(names[1], "c", names[2:3]),
+#     fctName = as.character(match.call()[[1]]), 
+#     fctText = lowFixed("Weibull (type 1)"), ...))
+# }
+# 
+# w3 <- W1.3
+
+# "W1.3u" <-
+# function(upper = 1, fixed = c(NA, NA, NA), names = c("b", "c", "e"), ...)
+# {
+#     ## Checking arguments
+#     numParm <- 3
+#     if (!is.character(names) | !(length(names)==numParm)) {stop("Not correct 'names' argument")}
+#     if (!(length(fixed)==numParm)) {stop("Not correct length of 'fixed' argument")}
+# 
+#     return(weibull1(fixed = c(fixed[1:2], upper, fixed[3]), 
+#     names = c(names[1:2], "d", names[3]), 
+#     fctName = as.character(match.call()[[1]]),
+#     fctText = upFixed("Weibull (type 1)", upper), ...))
+# }
+
+"W1.5" <-
+function(fixed = c(NA, NA, NA, NA, NA), names = c("b", "c", "d", "e", "f"), ...)
+# fixed, These values represent whether each parameter is fixed.
+# names, A character vector of parameter names.
+{
+    ## Checking arguments
+    numParm <- 5
+    if (!(length(fixed) == numParm)) {stop("Not correct length of 'fixed' argument")}
+    # Ensures that the user-provided fixed vector has exactly 4 elements.
+    if (!is.character(names) | !(length(names) == numParm)) {stop("Not correct 'names' argument")}
+    # Ensure that it is of character type and has 4 elements
+
+    return(weibull1(fixed = fixed, names = names,
+    fctName = as.character(match.call()[[1]]),
+    fctText = "modified_Weibull (type 1)", ...))
+    # This calls the weibull1() function to construct the actual Weibull model.
+    # This ensures that W1.5() behaves as an alias for modified_weibull1(), with additional validation.
+}
+
+w5 <- W1.5 # create another alias
+
+
+# "EXD.2" <-
+# function(fixed = c(NA, NA), names = c("d", "e"), ...)
+# {
+#     ## Checking arguments
+#     numParm <- 2
+#     if (!is.character(names) | !(length(names)==numParm)) {stop("Not correct 'names' argument")}
+#     if (!(length(fixed)==numParm)) {stop("Not correct length of 'fixed' argument")}
+# 
+#     return(weibull1(fixed = c(1, 0, fixed[1:2]), 
+#     names = c("b", "c", names[1:2]), 
+#     fctName = as.character(match.call()[[1]]), 
+#     fctText = lowFixed("Exponential decay"), ...))
+# }
+
+# "EXD.3" <-
+# function(fixed = c(NA, NA, NA), names = c("c", "d", "e"), ...)
+# {
+#     ## Checking arguments
+#     numParm <- 3
+#     if (!(length(fixed) == numParm)) {stop("Not correct length of 'fixed' argument")}
+#     if (!is.character(names) | !(length(names) == numParm)) {stop("Not correct 'names' argument")}
+# 
+#     return(weibull1(fixed = c(1, fixed[1:3]), 
+#     names = c("b", names[1:3]),
+#     fctName = as.character(match.call()[[1]]),
+#     fctText = "Shifted exponential decay", ...))
+# }
+```
+
