@@ -1,0 +1,722 @@
+---
+title: "MIE-AO"
+output: html_document
+date: "2025-06-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+```
+
+### ETC--ERS--APO
+```{r}
+# Returns ETC for each value in `dose`
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_OXI <- function(dose) {
+  3.32 / (1 + 437.75 / dose)
+}
+calc_LOXI <- function(dose) {
+  20.88 / (1 + exp(-14.18 * (log(dose) - log(1210.53))))
+}
+
+
+calc_ERS <- function(dose) {
+  ETC <- calc_ETC(dose)
+  OXI <- calc_OXI(dose)
+  
+  term1 <- -0.18 / (1 + (-0.68 / ETC)^11.36)
+  term2 <-  1.88 / (1 + (1.28 / OXI)^21.36)
+  
+  ERS <- term1 + term2
+  return(ERS)
+}
+calc_APO <- function(dose) {
+  LOXI <- calc_LOXI(dose)
+  ERS <- calc_ERS(dose)
+  
+  APO <- 3.37 * (LOXI / (13.85 + LOXI)) + 1.16 * ERS
+  return(APO)
+}
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+
+ETC <- calc_ETC(dose)
+OXI <- calc_OXI(dose)
+LOXI <- calc_LOXI(dose)
+ERS <- calc_ERS(dose)
+APO <- calc_APO(dose)
+ETC_marks <- calc_ETC(dose_marks)
+APO_marks <- calc_APO(dose_marks)
+
+marks_df <- data.frame(
+  dose = dose_marks,
+  MIE = ETC_marks,
+  KElast = APO_marks
+)
+marks_df$Type <- "Dose"
+
+
+```
+
+```{r}
+ETCvsAPO = data.frame(MIE = ETC, KElast = APO) 
+ggplot(data = ETCvsAPO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increase, Apoptosis", color = "DOSE") +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  theme_minimal()
+```
+
+
+### ETC--OXI--LOXI
+```{r}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_TH <- function(dose) {
+  -1.79 / (1 + (194.3 / dose))
+}
+calc_OXI <- function(dose) {
+  ETC <- calc_ETC(dose)
+  TH <- calc_TH(dose)
+  
+  term1 <- -3.42 * (-1.02 / (-1.02 + ETC))
+  term2 <-  3.42 * (-1.36e7 / (-1.36e7 + TH))
+  OXI <- term1 + term2
+  return(OXI)
+}
+calc_LOXI <- function(dose) {
+  OXI <- calc_OXI(dose)
+  
+  -0.99 * (OXI / (-3.34 + OXI)) - 0.58
+}
+
+dose <- seq(100, 5000, by = 10)
+ETC <- calc_ETC(dose)
+LOXI <- calc_LOXI(dose)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+ETC_marks <- calc_ETC(dose_marks)
+LOXI_marks <- calc_LOXI(dose_marks)
+marks_df <- data.frame(
+  dose = dose_marks,
+  MIE = ETC_marks,
+  KElast = LOXI_marks
+)
+marks_df$Type <- "Dose"
+ETC <- calc_ETC(dose)
+LOXI <- calc_LOXI(dose)
+```
+
+```{r}
+ETCvsLOXI = data.frame(MIE = ETC, KElast = LOXI) 
+ggplot(data = ETCvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increased, Lipid peroxidation", color = "DOSE") +
+  theme_minimal()
+```
+### TH--OXI--LOXI
+```{r}
+calc_TH <- function(dose) {
+  -1.79 / (1 + (194.3 / dose))
+}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_OXI <- function(dose) {
+  ETC <- calc_ETC(dose)
+  TH <- calc_TH(dose)
+  
+  term1 <- -3.42 * (-1.02 / (-1.02 + ETC))
+  term2 <-  3.42 * (-1.36e7 / (-1.36e7 + TH))
+  OXI <- term1 + term2
+  return(OXI)
+}
+calc_LOXI <- function(dose) {
+  OXI <- calc_OXI(dose)
+  
+  -0.99 * (OXI / (-3.34 + OXI)) - 0.58
+}
+
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+TH_marks <- calc_TH(dose_marks)
+LOXI_marks <- calc_LOXI(dose_marks)
+marks_df <- data.frame(
+  dose = dose_marks,
+  MIE = TH_marks,
+  KElast = LOXI_marks
+)
+marks_df$Type <- "Dose"
+TH <- calc_TH(dose)
+LOXI <- calc_LOXI(dose)
+```
+
+```{r}
+THvsLOXI = data.frame(MIE = TH, KElast = LOXI) 
+ggplot(data = THvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increased, Lipid peroxidation", color = "DOSE") +
+  theme_minimal()
+```
+### TH--OXI--ERS--APO
+```{r}
+calc_TH <- function(dose) {
+  -1.79 / (1 + (194.3 / dose))
+}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_LOXI <- function(dose) {
+  20.88 / (1 + exp(-14.18 * (log(dose) - log(1210.53))))
+}
+
+calc_OXI <- function(dose) {
+  ETC <- calc_ETC(dose)
+  TH <- calc_TH(dose)
+  
+  term1 <- -3.42 * (-1.02 / (-1.02 + ETC))
+  term2 <-  3.42 * (-1.36e7 / (-1.36e7 + TH))
+  OXI <- term1 + term2
+  return(OXI)
+}
+calc_ERS <- function(dose) {
+  ETC <- calc_ETC(dose)
+  OXI <- calc_OXI(dose)
+  
+  term1 <- -0.18 / (1 + (-0.68 / ETC)^11.36)
+  term2 <-  1.88 / (1 + (1.28 / OXI)^21.36)
+  
+  ERS <- term1 + term2
+  return(ERS)
+}
+calc_APO <- function(dose) {
+  LOXI <- calc_LOXI(dose)
+  ERS <- calc_ERS(dose)
+  
+  APO <- 3.37 * (LOXI / (13.85 + LOXI)) + 1.16 * ERS
+  return(APO)
+}
+
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+TH_marks <- calc_TH(dose_marks)
+APO_marks <- calc_APO(dose_marks)
+TH <- calc_TH(dose)
+APO <- calc_APO(dose)
+marks_df <- data.frame(
+  dose = dose_marks,
+  MIE = TH_marks,
+  KElast = APO_marks
+)
+marks_df_subset <- subset(marks_df, dose %in% c(100, 500, 1000, 2000, 5000))
+marks_df$Type <- "Dose"
+```
+
+```{r}
+THvsAPO = data.frame(MIE = TH, KElast = APO) 
+ggplot(data = THvsAPO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increase, Apoptosis", color = "DOSE") +
+  theme_minimal()
+```
+### ETC--NFKB
+```{r}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_NFKB <- function(dose) {
+  ETC <- calc_ETC(dose)
+  3.27 / (1 + (-0.94 / ETC)^7.14)
+}
+
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+ETC_marks <- calc_ETC(dose_marks)
+NFKB_marks <- calc_NFKB(dose_marks)
+marks_df <- data.frame(
+  dose = dose_marks,
+  MIE = ETC_marks,
+  KElast = NFKB_marks
+)
+marks_df$Type <- "Dose"
+ETC <- calc_ETC(dose)
+NFKB <- calc_NFKB(dose)
+```
+
+```{r}
+ETCvsNFKB = data.frame(MIE = ETC, KElast = NFKB) 
+ggplot(data = ETCvsNFKB) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Inhibition, NF-kb", color = "DOSE") +
+  theme_minimal()
+```
+### ETC--OXI; TH--OXI
+```{r}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_TH <- function(dose) {
+  -1.79 / (1 + (194.3 / dose))
+}
+
+calc_OXI <- function(dose) {
+  ETC <- calc_ETC(dose)
+  TH <- calc_TH(dose)
+  
+  term1 <- -3.42 * (-1.02 / (-1.02 + ETC))
+  term2 <-  3.42 * (-1.36e7 / (-1.36e7 + TH))
+  OXI <- term1 + term2
+  return(OXI)
+}
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+ETC_marks <- calc_ETC(dose_marks)
+TH_marks <- calc_TH(dose_marks)
+OXI_marks <- calc_OXI(dose_marks)
+marks_df_1 <- data.frame(
+  dose = dose_marks,
+  MIE = ETC_marks,
+  KElast = OXI_marks
+)
+marks_df_2 <- data.frame(
+  dose = dose_marks,
+  MIE = TH_marks,
+  KElast = OXI_marks
+)
+marks_df_2_subset <- subset(marks_df_2, dose %in% c(100, 500, 1000, 2000, 5000))
+marks_df_1$Type <- "Dose"
+marks_df_2$Type <- "Dose"
+ETC <- calc_ETC(dose)
+TH <- calc_TH(dose)
+OXI <- calc_OXI(dose)
+```
+
+```{r}
+ETCvsOXI = data.frame(MIE = ETC, KElast = OXI) 
+ggplot(data = ETCvsOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_1, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_1,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increased, oxidative stress", color = "DOSE") +
+  theme_minimal()
+
+THvsOXI = data.frame(MIE = TH, KElast = OXI) 
+ggplot(data = THvsOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_2, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_2_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increased, oxidative stress", color = "DOSE") +
+  theme_minimal()
+```
+### TH/ETC--OXI--CTOX(--CPRO); ALK/SURE--CTOX(--CPRO)
+```{r}
+calc_ETC <- function(dose) {
+  -33.31 / (1 + 14683.08 / dose)
+}
+calc_TH <- function(dose) {
+  -1.79 / (1 + (194.3 / dose))
+}
+calc_SURE <- function(dose) {
+  -16.98 + (2.75 + 16.98) / (1 + (43.68 / dose))
+}
+calc_ALK <- function(dose) {
+  -123.18 + (2.37 + 123.18) / (1 + (5.67 / dose))
+}
+
+
+calc_OXI <- function(dose) {
+  ETC <- calc_ETC(dose)
+  TH <- calc_TH(dose)
+  
+  term1 <- -3.42 * (-1.02 / (-1.02 + ETC))
+  term2 <-  3.42 * (-1.36e7 / (-1.36e7 + TH))
+  OXI <- term1 + term2
+  return(OXI)
+}
+calc_CTOX <- function(dose) {
+  OXI <- calc_OXI(dose)
+  SURE <- calc_SURE(dose)
+  ALK <- calc_ALK(dose)
+  
+  term1 <- 0.31 * exp(1.17 * OXI) 
+  term2 <- 0.05 * exp(1.78 * SURE)
+  term3 <- 0.54 * exp(0.18 * ALK)
+  CTOX <- term1 - term2 - term3
+}
+calc_LOXI <- function(dose) {
+  OXI <- calc_OXI(dose)
+  
+  -0.99 * (OXI / (-3.34 + OXI)) - 0.58
+}
+calc_CPRO <- function(dose) {
+  CTOX <- calc_CTOX(dose)
+  2.47 * exp(0.30 * CTOX) - 3.12
+}
+
+
+
+dose <- seq(100, 5000, by = 10)
+dose_marks <- sort(unique(c(100, seq(500, 5000, by = 500))))
+ETC_marks <- calc_ETC(dose_marks)
+TH_marks <- calc_TH(dose_marks)
+CTOX_marks <- calc_CTOX(dose_marks)
+SURE_marks <- calc_SURE(dose_marks)
+ALK_marks <- calc_ALK(dose_marks)
+CPRO_marks <- calc_CPRO(dose_marks)
+marks_df_1 <- data.frame(
+  dose = dose_marks,
+  MIE = ETC_marks,
+  #KElast = CTOX_marks
+  # KElast = LOXI_marks
+  KElast = CPRO_marks
+)
+marks_df_2 <- data.frame(
+  dose = dose_marks,
+  MIE = TH_marks,
+  #KElast = CTOX_marks
+  # KElast = LOXI_marks
+  KElast = CPRO_marks
+)
+marks_df_3 <- data.frame(
+  dose = dose_marks,
+  MIE = SURE_marks,
+  #KElast = CTOX_marks
+  # KElast = LOXI_marks
+  KElast = CPRO_marks
+)
+marks_df_4 <- data.frame(
+  dose = dose_marks,
+  MIE = ALK_marks,
+  #KElast = CTOX_marks
+  # KElast = LOXI_marks
+  KElast = CPRO_marks
+)
+marks_df_1$Type <- "Dose"
+marks_df_2$Type <- "Dose"
+marks_df_3$Type <- "Dose"
+marks_df_4$Type <- "Dose"
+marks_df_1_subset <- subset(marks_df_1, dose %in% c(100, 500, 1000, 2000, 5000))
+marks_df_2_subset <- subset(marks_df_2, dose %in% c(100, 500, 1000, 2000, 5000))
+marks_df_3_subset <- subset(marks_df_3, dose %in% c(100, 500, 1000, 2000, 5000))
+marks_df_4_subset <- subset(marks_df_4, dose %in% c(100, 500, 1000, 2000, 5000))
+ETC <- calc_ETC(dose)
+TH <- calc_TH(dose)
+SURE <- calc_SURE(dose)
+ALK <- calc_ALK(dose)
+CTOX <- calc_CTOX(dose)
+LOXI <- calc_LOXI(dose)
+CPRO <- calc_CPRO(dose)
+```
+
+```{r}
+ETCvsCTOX = data.frame(MIE = ETC, KElast = CTOX) 
+ggplot(data = ETCvsCTOX) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_1, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_1_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increase, Cytotoxicity", color = "DOSE") +
+  theme_minimal()
+
+THvsCTOX = data.frame(MIE = TH, KElast = CTOX) 
+ggplot(data = THvsCTOX) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_2, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_2_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increase, Cytotoxicity", color = "DOSE") +
+  theme_minimal()
+
+SUREvsCTOX = data.frame(MIE = SURE, KElast = CTOX) 
+ggplot(data = SUREvsCTOX) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_3, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_3_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding of substrate, endocytic receptor", y = "Increase, Cytotoxicity", color = "DOSE") +
+  theme_minimal()
+
+ALKvsCTOX = data.frame(MIE = ALK, KElast = CTOX) 
+ggplot(data = ALKvsCTOX) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_4, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_4_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Alkylation, protein", y = "Increase, Cytotoxicity", color = "DOSE") +
+  theme_minimal()
+```
+```{r}
+ETCvsLOXI = data.frame(MIE = ETC, KElast = LOXI) 
+ggplot(data = ETCvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_1, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_1_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increased, Lipid peroxidation", color = "DOSE") +
+  theme_minimal()
+
+THvsLOXI = data.frame(MIE = TH, KElast = LOXI) 
+ggplot(data = THvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_2, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_2_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increased, Lipid peroxidation", color = "DOSE") +
+  theme_minimal()
+
+SUREvsLOXI = data.frame(MIE = SURE, KElast = LOXI) 
+ggplot(data = SUREvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_3, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_3_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding of substrate, endocytic receptor", y = "Increased, Lipid peroxidation", color = "DOSE") +
+  theme_minimal()
+
+### They are not MIEs of lipid peroxidation, I might make a mistake before, just ignore it
+# ALKvsLOXI = data.frame(MIE = ALK, KElast = LOXI) 
+# ggplot(data = ALKvsLOXI) + geom_line(aes(x = MIE, y = KElast)) +
+#   geom_point(data = marks_df_4, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+#   geom_text(
+#     data = marks_df_4_subset,
+#     aes(x = MIE, y = KElast, label = dose),
+#     vjust = -1,
+#     color = "black",
+#     size = 3.5
+#   ) +
+#   scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+#   scale_color_manual(
+#   name = "Legend",
+#   values = c("Dose" = "blue")
+# ) +
+#   labs(title = "MIE VS last downstream KE", x = "Alkylation, protein", y = "Increased, Lipid peroxidation", color = "DOSE") +
+#   theme_minimal()
+```
+```{r}
+ETCvsCPRO = data.frame(MIE = ETC, KElast = CPRO) 
+ggplot(data = ETCvsCPRO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_1, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_1_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Inhibition, mtETC Chain Complexes", y = "Increase, Regenerative Cell Proliferation", color = "DOSE") +
+  theme_minimal()
+
+THvsCPRO = data.frame(MIE = TH, KElast = CPRO) 
+ggplot(data = THvsCPRO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_2, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_2_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding, Thiol/seleno proteins", y = "Increase, Regenerative Cell Proliferation", color = "DOSE") +
+  theme_minimal()
+
+SUREvsCPRO = data.frame(MIE = SURE, KElast = CPRO) 
+ggplot(data = SUREvsCPRO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_3, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_3_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Binding of substrate, endocytic receptor", y = "Increase, Regenerative Cell Proliferation", color = "DOSE") +
+  theme_minimal()
+
+ALKvsCPRO = data.frame(MIE = ALK, KElast = CPRO) 
+ggplot(data = ALKvsCPRO) + geom_line(aes(x = MIE, y = KElast)) +
+  geom_point(data = marks_df_4, aes(x = MIE, y = KElast, color = Type), size = 1.5) +
+  geom_text(
+    data = marks_df_4_subset,
+    aes(x = MIE, y = KElast, label = dose),
+    vjust = -1,
+    color = "black",
+    size = 3.5
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.2))) +
+  scale_color_manual(
+  name = "Legend",
+  values = c("Dose" = "blue")
+) +
+  labs(title = "MIE VS last downstream KE", x = "Alkylation, protein", y = "Increase, Regenerative Cell Proliferation", color = "DOSE") +
+  theme_minimal()
+```

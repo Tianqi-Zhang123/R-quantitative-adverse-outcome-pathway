@@ -1,0 +1,390 @@
+---
+title: "metadata"
+output: html_document
+date: "2024-12-19"
+---
+
+
+#Loading packages
+```{r}
+library(tidyverse)
+library(tidyr)
+library(data.table)
+library(ggfortify)
+library(GGally)
+rm(list = ls())
+setwd("C:/Users/ZTian/Desktop/RP1/scripts")
+```
+
+
+#Data loading and Quality control
+```{r pressure, echo=FALSE}
+#Read in data
+metadata <- read.delim("../data/raw data/EUT125_DAM_Metadata.txt")
+raw_data <- read.delim("../data/raw data/EUT125_RNA-Seq_Counts_per_gene_per_sample_raw_merge.txt")
+source("Functions.R")
+module_definition <- readRDS("../data/raw data/module_definition.rds")
+
+
+#filter out which are treated with Gentamycin and control data(MEDIUM)
+GEMmeta <- metadata[ metadata$experiment == "GENTAMYCIN" | metadata$experiment == "MEDIUM", ]
+GEMraw = raw_data[, colnames(raw_data) %in% GEMmeta$fastq_sample_id ]
+RAWgenedirty = GEMraw %>%
+  mutate(probe_id = raw_data$probe_id) 
+RAWclean = RAWgenedirty[ ,order(colnames(RAWgenedirty))]
+
+#simplify fastq_sample_id in metadata -> s_metadata, some simplified ids are duplicate
+##used in "Replicate correlation" chunk
+#simplify fastq_sample_id
+simplified_sample_name <- GEMmeta$fastq_sample_id %>%
+  sub('S_UL_DDS_HVK010_RPTECTERT1_', '', .) %>%
+  gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', .)
+s_GEMmeta <- GEMmeta %>%
+  mutate(sample_name = simplified_sample_name) %>% 
+  select(-fastq_sample_id, sample_name, everything())
+
+
+#Quality control sample size filter
+countdata_threshold <- 1E6
+
+# We take the sum of every individual column and transpose the data frame
+size <- RAWclean %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  pivot_longer(cols = everything(), names_to = "sample_name", values_to = "sample_size")
+
+##simplify the sample_name(control groups have some duplicate names)
+# size$sample_name <- sub('S_UL_DDS_HVK010_RPTECTERT1_', '', size$sample_name)
+# size$sample_name <- gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', size$sample_name)
+
+# We make a bar plot using ggplot of the sample sizes with the threshold as red horizontal line for quick interpretation
+ggplot(data = size, mapping = aes(x = sample_name, y = sample_size)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1)) +
+  scale_x_discrete(
+    #simplify the labels
+    labels = function(x) {
+      sapply(x, function(name) {
+        sub('S_UL_DDS_HVK010_RPTECTERT1_', '', name) %>%
+          gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', .)
+      })
+    }
+  ) +
+  #Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+  #Please use `linewidth` instead.
+  geom_hline(yintercept=countdata_threshold, linewidth = 2, color = "red")+
+  ggtitle("Sample size of raw data") + ylab('Sample size')
+
+# We identify the samples with a size (total amount of counts) below or equal to the threshold.
+bad_samples = size %>% filter(sample_size <= countdata_threshold)
+
+# We filter the raw countdata for the bad samples, "fsample" in countdata_raw_fsample means filtered sample
+raw_data_fsample = RAWclean %>% select(-all_of(bad_samples %>% pull(sample_name)))
+
+#print the output
+bad_samples %>%
+  str()
+```
+#filter low-expressed genes
+```{r}
+#calculate CPM
+#the command is from the shared slides, to check if the outcome is same with what I write
+#same
+CPM <- as.data.frame(apply(raw_data_fsample[,-1], 2, function(x) (x / sum(x))*1000000))
+
+```
+
+
+```{r}
+#calculate CPM(counts per million)
+
+##exclude probe_id
+RAW_num <- raw_data_fsample[,-1]
+##calculate cpm
+cpm <- as.data.frame(
+  sapply(names(RAW_num), function(sample) {
+    RAW_num[[sample]] / 
+      size$sample_size[match(sample, size$sample_name)] * 1e6
+  })
+)
+##add probe_id
+cpm <- cbind(probe_id = raw_data_fsample$probe_id, cpm)
+CPM <- cbind(probe_id = raw_data_fsample$probe_id, CPM)
+```
+
+```{r}
+#Detection of low cpm probes
+#GEMmeta$mean_id <- gsub(".*_(T\\d+)_.*_(GENTAMYCIN|MEDIUM)_(D\\d+).*", "\\1_\\2_\\3", GEMmeta$fastq_sample_id)
+#GEMmeta$sample_name <- GEMmeta$fastq_sample_id
+GEMmeta <- GEMmeta %>% dplyr::rename(mean_id = condition) %>%
+  rename(sample_name = fastq_sample_id)
+
+low_cpm_probes <- get_low_cpm_probes(countdata = CPM, metadata = GEMmeta, exclude = c())
+raw_data_fsample_fprobe = raw_data_fsample %>% filter(!probe_id %in% low_cpm_probes)
+#raw_data_fsample_fprobe$gene_symbol <- paste0("id_", gsub("_.*", "", raw_data_fsample_fprobe$probe_id))
+#raw_data_fsample_fprobe$entrez_id <-  module_definition$entrez_id[match(raw_data_fsample_fprobe$gene_symbol, module_definition$gene_symbol)]
+
+low_cpm_probes %>% str()
+```
+
+## Sum the raw counts of probes targeting the same gene
+```{r}
+# After filtering for low cpm probes how many probes are left that target multiple genes
+probe_distribution <- raw_data_fsample_fprobe %>% 
+  separate(col = probe_id, into = c("gene_symbol", "probe"), sep = "_") %>% 
+  select(gene_symbol, probe) %>% 
+  group_by(gene_symbol) %>% 
+  summarise(x = n()) %>% 
+  count(x) %>% select("Probe count" = x,
+                      "Unique genes" = n)
+
+# We attach the gene symbol for the highest probe count only 
+probe_distribution <- raw_data_fsample_fprobe %>% 
+  separate(col = probe_id, into = c("gene_symbol", "probe"), sep = "_") %>% 
+  select(gene_symbol, probe) %>% 
+  group_by(gene_symbol) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  filter(n == 6) %>% 
+  right_join(y = probe_distribution, by = c("n" = "Probe count")) %>% 
+  arrange(n) %>% 
+  select("Probe Count" = n, `Unique genes`, gene_symbol)
+
+# We sum the probes targeting the same gene
+raw_data_fsample_fprobe_sumprobe <- raw_data_fsample_fprobe %>% 
+  separate(col = probe_id, into = c("gene_symbol", "probe"), sep = "_") %>% 
+  group_by(gene_symbol) %>% 
+  summarise(across(where(is.numeric), sum), .groups = "drop") %>%
+  filter(gene_symbol != "") 
+
+#output
+print(probe_distribution)
+  cat("\n")
+  print("Dataframe dimensions before probe sum")
+  dim(raw_data_fsample_fprobe) %>% str()
+  cat("\n")
+  print("Dimensions after probe sum")
+  dim(raw_data_fsample_fprobe_sumprobe) %>% str()
+```
+<!-- # In my metadata, replicate correlation analysis has been conducted so I don't need to do it again. -->
+<!-- # CPM normalization ## for replicate correlation analysis -->
+<!-- ```{r} -->
+<!-- # We use the apply function to apply out cpm_normalization column wise (indicated by the 2) over the countdata_raw_fsample_fprobe_sumprobe object -->
+<!-- data_cpm_fprobe_fsample_sumprobe <- data.frame(apply(raw_data_fsample_fprobe_sumprobe %>%  -->
+<!--                                                             column_to_rownames(var = "gene_symbol"), 2, function(x) (x / sum(x))*1000000)) -->
+
+<!-- #print the output -->
+<!-- print("RAWclean") -->
+<!--   cat("\n") -->
+<!--   data.frame(raw_data_fsample_fprobe_sumprobe %>% column_to_rownames(var = "gene_symbol") %>% str()) -->
+<!--   cat("\n") -->
+<!--   print("data cpm normalized") -->
+<!--   cat("\n") -->
+<!--  data_cpm_fprobe_fsample_sumprobe %>% str() -->
+<!-- ``` -->
+
+<!-- ## Replicate correlation -->
+<!-- #### Do the replicates (for the same treatment condition) correlate with each other? -->
+<!-- ```{r} -->
+<!-- # We combine the replicates from the same treatment condition and perform replicate correlation using the ggpairs function -->
+<!-- ##use s_GEMmeta cause its sample_name is simplified -->
+<!-- correlation = data_cpm_fprobe_fsample_sumprobe %>% -->
+<!--   rownames_to_column(var = "gene_symbol") %>% -->
+<!--   pivot_longer(-gene_symbol,names_to = "sample_name") %>% -->
+<!--   left_join(s_GEMmeta, by = "sample_name") %>% -->
+<!--   mutate(treatment = ifelse(grepl("GENTAMYCIN", sample_name), "GENTAMYCIN", "MEDIUM"), -->
+<!--     conc = sub(".*_(D\\d+)_.*", "\\1", sample_name)) %>% -->
+<!--   unite("treatment_conc", c(treatment, conc)) %>% -->
+<!--   select(gene_symbol, sample_name,treatment_conc, value) %>%  -->
+<!--   nest_by(treatment_conc) %>%  -->
+<!--   mutate(data = list(data %>% pivot_wider(names_from = sample_name, values_from = value)), -->
+<!--          plot = list(ggpairs(data = data %>% select(-gene_symbol),upper = list(continuous = "cor")) + theme_bw()))  -->
+
+<!-- # We print the output -->
+<!-- for(i in 1:4){ -->
+<!--   print(correlation$treatment_conc[[i]]) -->
+<!--   print(correlation$plot[[i]]) -->
+<!--   } -->
+<!-- ```   -->
+
+
+#get the mean expression of technical replicate data per control group
+```{r}
+#variates for loop
+reps <- c("R1", "R2", "R3")
+times <- c("T8", "T24")
+#loop
+for (r in reps) {
+  for (ti in times) {
+    # choose technical replicate data
+    column_pattern <- paste0(".*_", ti, "_", r, "_.*_MEDIUM_D0", "_.*")
+    Tec_MEDIUM <- grep(column_pattern, colnames(raw_data_fsample_fprobe_sumprobe))
+    #check if there is the column
+    if (length(Tec_MEDIUM) > 0) {
+      #new column name
+      new_col_name <- paste(ti, r, "MEDIUM", sep = "_")
+      #calculate
+      raw_data_fsample_fprobe_sumprobe[[new_col_name]] <- rowMeans(
+        raw_data_fsample_fprobe_sumprobe[, Tec_MEDIUM, drop = FALSE],
+        na.rm = TRUE
+      )
+      # delete redundant columns
+      raw_data_fsample_fprobe_sumprobe <- raw_data_fsample_fprobe_sumprobe[, -Tec_MEDIUM, drop = FALSE]
+    } else {
+      # if no such column...
+      warning(paste("No columns matched for pattern:", column_pattern))
+    }
+  }
+}
+
+```
+
+# change concerning sample_name according to new column name in raw_data_fsample_fprobe_sumprobe
+```{r}
+reps <- c("R1", "R2", "R3")
+times <- c("T8", "T24")
+
+#loop
+for (r in reps) {
+  for (ti in times) {
+    row_pattern <- paste0(".*_", ti, "_", r, "_.*_MEDIUM_D0", "_.*")
+    # choose the rows
+    matching_rows <- grep(row_pattern, GEMmeta[[1]])
+    new_row_name <- paste(ti, r, "MEDIUM_D0", sep = "_")
+    GEMmeta[matching_rows, 1] <- new_row_name
+  }
+}
+#remove duplicate rows
+GEMmeta <- GEMmeta %>%
+  distinct(across(1), .keep_all = TRUE)
+
+
+#simplify GEMmeta sample_name
+GEMmeta <- GEMmeta %>%
+  mutate(
+    sample_name = sub('S_UL_DDS_HVK010_RPTECTERT1_', '', sample_name),
+    sample_name = gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', sample_name)
+  ) %>%
+  select(sample_name, everything())
+#delete bad_samples
+GEMmeta <- GEMmeta %>%
+  filter(sample_name != "T24_R3_GENTAMYCIN_D500")
+
+#simplify the colname of raw_data_fsample_fprobe_sumprobe
+colnames(raw_data_fsample_fprobe_sumprobe) <- colnames(raw_data_fsample_fprobe_sumprobe) %>%
+  sub('S_UL_DDS_HVK010_RPTECTERT1_', '', .) %>%  
+  gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', .)
+```
+
+
+## Differential gene expression analysis based on the negative binomial distribution (DESeq2 package)
+#### Inspect the contrast object to see which comparisons we are going to make.
+#### What does the mean_id_treatment and mean_id_control column represent? hint: take a look at the metadata object
+```{r}
+# generate a contrast table which contains the mean_id comparison we aim the perform
+# add a column to match experiment group and control group
+# but there is no need cause deseq can deal with them based on biological replicate
+
+
+GEMmeta <- GEMmeta %>%
+  mutate(rep_key = paste(time, biological_replicate, sep = "_"))
+
+experiment_data <- GEMmeta %>%
+  filter(experiment == "GENTAMYCIN") %>%
+  select(rep_key, experiment_sample = sample_name, time)
+control_data <- GEMmeta %>%
+  filter(experiment == "MEDIUM") %>%
+  select(rep_key, control_sample = sample_name, time)
+
+# match experiment data and control data by rep_key
+contrast <- experiment_data %>%
+  left_join(control_data, by = c("rep_key", "time")) %>%
+  select(time, replicate = rep_key, experiment_sample, control_sample)  # adjust the order
+
+contrast$replicate <- sub(".*_", "", contrast$replicate)
+
+
+contrast$control_sample <- gsub("_D0$", "", contrast$control_sample)
+
+
+```
+
+```{r}
+raw_data_fsample_fprobe_sumprobe <- as.data.frame(raw_data_fsample_fprobe_sumprobe)
+rownames(raw_data_fsample_fprobe_sumprobe) <- raw_data_fsample_fprobe_sumprobe[, 1]
+countdata <- raw_data_fsample_fprobe_sumprobe[, -1]
+
+log2fc_results <- data.frame(Gene_symbol = rownames(raw_data_fsample_fprobe_sumprobe))
+
+# new dataframe for the result
+log2fc_results <- data.frame()
+
+# calculate based on the row
+for (i in 1:nrow(contrast)) {
+  # sample name
+  exp_sample <- contrast$experiment_sample[i]
+  ctrl_sample <- contrast$control_sample[i]
+  replicate_id <- contrast$replicate[i]
+  
+  # ensure samples exist
+  if (!(exp_sample %in% colnames(raw_data_fsample_fprobe_sumprobe)) | !(ctrl_sample %in% colnames(raw_data_fsample_fprobe_sumprobe))) {
+    stop(paste("Sample not found in countdata:", exp_sample, "or", ctrl_sample))
+  }
+  
+  # calculate log2FC
+  log2fc <- log2((raw_data_fsample_fprobe_sumprobe[, exp_sample] + 1) / (raw_data_fsample_fprobe_sumprobe[, ctrl_sample] + 1))
+  
+  # temporary dataframe to save the outcome of per loop
+  temp_results <- data.frame(
+    Gene = rownames(raw_data_fsample_fprobe_sumprobe), 
+    replicate = replicate_id,                         
+    log2FC = log2fc,
+    experiment_sample <- exp_sample,
+    control_sample <- ctrl_sample
+  )
+  
+  # add the outcomes to log2fc_results
+  log2fc_results <- rbind(log2fc_results, temp_results)
+}
+
+
+
+
+```
+
+
+#arrange format
+```{r}
+# time
+log2fc_results$time <- ifelse(grepl("T24", log2fc_results$experiment_sample....exp_sample), 24,
+                              ifelse(grepl("T8", log2fc_results$experiment_sample....exp_sample), 8, NA))
+
+# conc
+log2fc_results$conc <- ifelse(grepl("D1000", log2fc_results$experiment_sample....exp_sample), 1000,
+                              ifelse(grepl("D500", log2fc_results$experiment_sample....exp_sample), 500, 
+                                     ifelse(grepl("D250", log2fc_results$experiment_sample....exp_sample), 250, NA)))
+
+# experiment, pvalue, padj
+log2fc_results <- log2fc_results %>%
+  mutate(experiment = "GENTAMYCIN_lu_human_rptectert1",
+         pvalue = 0.1,
+         padj = 0.1)
+
+# split the whole file into 3 according to the replicate number, otherwise it will sum up all the replicate data
+log2fc_1 <- log2fc_results[log2fc_results$replicate == 1, ]
+log2fc_2 <- log2fc_results[log2fc_results$replicate == 2, ]
+log2fc_3 <- log2fc_results[log2fc_results$replicate == 3, ]
+
+## gene_id = gene_symbol
+log2fc_1 <- log2fc_1 %>%
+  dplyr::select(experiment, gene_id = gene_symbol, time, conc, log2fc = log2FC, pvalue, padj)
+log2fc_2 <- log2fc_2 %>%
+  dplyr::select(experiment, gene_id = gene_symbol, time, conc, log2fc = log2FC, pvalue, padj)
+log2fc_3 <- log2fc_3 %>%
+  dplyr::select(experiment, gene_id = gene_symbol, time, conc, log2fc = log2FC, pvalue, padj)
+## save
+write.table(log2fc_1, file = "log2FC_1.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(log2fc_2, file = "log2FC_2.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+write.table(log2fc_3, file = "log2FC_3.txt", sep = "\t", row.names = FALSE, col.names = TRUE)
+
+```

@@ -20,172 +20,173 @@ module_table <- module_table %>%
     conc_level == 1 ~ 250,
     conc_level == 2 ~ 500,
     conc_level == 3 ~ 1000
-  ))
+  )) %>%
+  # remove outlier of 264 + 97 = 71
+  filter(!(module == "hRPTECTERT1_97" & conc_level == 1000 &
+           startsWith(as.character(eg_score), "-0.527544"))) %>%
+  filter(!(module == "hRPTECTERT1_264" & conc_level == 1000 &
+           startsWith(as.character(eg_score), "0.035441"))) %>%
+  filter(!(module == "hRPTECTERT1_71" & conc_level == 1000 &
+           startsWith(as.character(eg_score), "0.647139")))
 ```
 
+
 ```{r}
-dose_response_analysis <- function(module_number, time_point, key_event) {
+# fit using 7 different models and output all of them to select manually
+dose_response_analysis <- function(module_number, key_event) {
   library(dplyr)
   library(drc)
   library(ggplot2)
-  library(knitr)  # used to generate the form
-  
-  # filter dataset
+  library(knitr)
+
+  # filter data
   module_number <- as.character(module_number)
-  time_point <- as.numeric(time_point)
   KE <- module_table %>% dplyr::filter(
     module == paste0('hRPTECTERT1_', module_number) &
-      time == time_point &
+      time == 24 &
       experiment %in% c(
         'uploadFile1_GENTAMYCINluhumanrptectert1',
         'uploadFile2_GENTAMYCINluhumanrptectert1',
         'uploadFile3_GENTAMYCINluhumanrptectert1'
       )
   )
-  
+
   assign(paste0("KE_", module_number), KE, envir = .GlobalEnv)
   print(paste("Dataset KE_", module_number, " has been created!", sep = ""))
-  
-  # merge all the data
+
+  # merge data to draw error bars
   data_summary <- KE %>%
     group_by(conc_level) %>%
     summarise(
       mean_response = mean(eg_score),
-      sd_response = sd(eg_score), # calculate standard deviation
-      se_response = sd(eg_score) / sqrt(n()) # standard error, sqrt: square root
+      sd_response = sd(eg_score),
+      se_response = sd(eg_score) / sqrt(n())
     )
-  
-  # alternative models
+
   models <- list(
+    MM.3 = MM.3(),
+    MM.2 = MM.2(),
+    LL.2 = LL.2(),
+    LL.3 = LL.3(),
     LL.4 = LL.4(),
     LL.5 = LL.5(),
     W1.4 = W1.4()
   )
-  
-  results <- list()  # store all outcomes of these models
-  model_metrics <- data.frame(Model = character(), BIC = numeric(), R_squared = numeric(), Num_parameters = integer(), stringsAsFactors = FALSE)
 
-  # fit each model sequentially
+  results <- list()
+  plots <- list()
+  model_metrics <- data.frame(Model = character(), BIC = numeric(), R_squared = numeric(), Adjusted_R_squared = numeric(), Num_parameters = integer(), stringsAsFactors = FALSE)
+
+  # fit all models + calculate fitting index + plotting
   for (model_name in names(models)) {
-    model <- tryCatch({
-      drm(eg_score ~ conc_level, data = KE, fct = models[[model_name]])
-    }, error = function(e) NULL)
-    
-    if (!is.null(model)) {
-      # calculate BIC
-      log_likelihood <- logLik(model)
-      n <- nrow(KE)  # number of observations
-      k <- length(coef(model))  # number of parameters
-      BIC_value <- log(n) * k - 2 * as.numeric(log_likelihood)
-      # likelihood: The probability of the data D occurring given the model parameters
-      
-      # calculate R²
-      observed <- KE$eg_score
-      predicted <- predict(model)
-      RSS <- sum((observed - predicted)^2)
-      TSS <- sum((observed - mean(observed))^2)
-      R_squared <- 1 - (RSS / TSS)
+  model <- tryCatch({
+    drm(eg_score ~ conc_level, data = KE, fct = models[[model_name]])
+  }, error = function(e) NULL)
 
-      # store the results
-      model_metrics <- rbind(model_metrics, data.frame(Model = model_name, BIC = BIC_value, R_squared = R_squared, Num_parameters = k))
-      results[[model_name]] <- list(model = model, BIC = BIC_value, R_squared = R_squared, Num_parameters = k)
-      
-      print(paste("BIC for", model_name, ":", round(BIC_value, 4)))
-      print(paste("R² for", model_name, ":", round(R_squared, 4)))
+  if (!is.null(model)) {
+    best_coefficients <- coef(model)
+
+    # write equation
+    if (model_name == "LL.2") {
+      eq <- paste0("Y = 1 / (1 + exp(", round(best_coefficients[1], 2), " * (log(X) - log(", round(best_coefficients[2], 2), "))))")
+    } else if (model_name == "LL.3") {
+      eq <- paste0("Y = ", round(best_coefficients[2], 2), 
+                   " / (1 + exp(", round(best_coefficients[1], 2), 
+                   " * (log(X) - log(", round(best_coefficients[3], 2), "))))")
+    } else if (model_name == "LL.4") {
+      eq <- paste0("Y = ", round(best_coefficients[2], 2), " + (", 
+                   round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
+                   ") / (1 + exp(", round(best_coefficients[1], 2), 
+                   " * (log(X) - log(", round(best_coefficients[4], 2), "))))")
+    } else if (model_name == "LL.5") {
+      eq <- paste0("Y = ", round(best_coefficients[2], 2), " + (", 
+                   round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
+                   ") / (1 + exp(", round(best_coefficients[1], 2), 
+                   " * (log(X) - log(", round(best_coefficients[4], 2), "))))^", 
+                   round(best_coefficients[5], 2), ")")
+    } else if (model_name == "W1.4") {
+      eq <- paste0("Y = ", round(best_coefficients[2], 2), " + (", 
+                   round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
+                   ") * exp(-exp(", round(best_coefficients[1], 2), 
+                   " * (log(X) - log(", round(best_coefficients[4], 2), "))))")
+    } else if (model_name == "MM.2") {
+      eq <- paste0("Y = ", round(best_coefficients[1], 2),
+                   " / (1 + (", round(best_coefficients[2], 2), " / X ))")
+    } else if (model_name == "MM.3") {
+      eq <- paste0("Y = ", round(best_coefficients[1], 2), " + (", 
+                   round(best_coefficients[2], 2), " - ", round(best_coefficients[1], 2), 
+                   ") / (1 + (", round(best_coefficients[3], 2), " / X ))")
+    } else {
+      eq <- "Unknown model type"
+    }
+
+    # calculate fitting index
+    log_likelihood <- logLik(model)
+    n <- nrow(KE)
+    k <- length(coef(model))
+    BIC_value <- log(n) * k - 2 * as.numeric(log_likelihood)
+
+    observed <- KE$eg_score
+    predicted <- predict(model)
+    RSS <- sum((observed - predicted)^2)
+    TSS <- sum((observed - mean(observed))^2)
+    R_squared <- 1 - (RSS / TSS)
+    Adjusted_R_squared <- 1 - ((1 - R_squared) * (n - 1)) / (n - k - 1)
+
+    model_metrics <- rbind(model_metrics, data.frame(Model = model_name, BIC = BIC_value, R_squared = R_squared, Adjusted_R_squared = Adjusted_R_squared, Num_parameters = k))
+    results[[model_name]] <- list(model = model)
+
+    # fit data
+    dose_seq <- seq(min(KE$conc_level), max(KE$conc_level), length.out = 100)
+    predicted_curve <- predict(model, newdata = data.frame(conc_level = dose_seq))
+    fit_data <- data.frame(dose = dose_seq, response = predicted_curve)
+
+      # plot
+      plot <- ggplot() +
+        geom_point(data = KE, aes(x = conc_level, y = eg_score), color = "black", size = 3) +
+        geom_errorbar(
+          data = data_summary,
+          aes(x = conc_level, ymin = mean_response - se_response, ymax = mean_response + se_response),
+          width = 0.05, color = "black"
+  ) +
+        geom_line(data = fit_data, aes(x = dose, y = response), color = "red", size = 1) +
+        scale_x_log10() +
+        labs(
+          
+          title = paste("Model:", model_name, "| Module", module_number, "-", key_event),
+          subtitle = eq,  
+          x = "Concentration (µM)",
+          y = "EGs") +
+          theme_minimal()
+      print(plot)
+      plots[[model_name]] <- plot
     }
   }
-  
-  # select model with lowest BIC
-  min_BIC <- min(model_metrics$BIC)
-  best_candidates <- model_metrics %>% filter(BIC == min_BIC)
-  
-  if (nrow(best_candidates) > 1) {
-    # choose the model with highest R-squared if there is more than one models with lowest BIC
-    max_R_squared <- max(best_candidates$R_squared)
-    best_candidates <- best_candidates %>% filter(R_squared == max_R_squared)
-    
-    if (nrow(best_candidates) > 1) {
-      # choose the model with least parameters if their R-squared values are also same
-      min_params <- min(best_candidates$Num_parameters)
-      best_candidates <- best_candidates %>% filter(Num_parameters == min_params)
-    }
-  }
-  
-  # final selected model
-  best_model_name <- best_candidates$Model[1]
-  best_model <- results[[best_model_name]]$model
-  best_BIC <- results[[best_model_name]]$BIC
-  best_R_squared <- results[[best_model_name]]$R_squared
-  best_coefficients <- coef(best_model)
-  
-  print(paste("Best model:", best_model_name, "with BIC =", round(best_BIC, 4), "and R² =", round(best_R_squared, 4)))
-  
-  # generate the fitted equation
-  if (best_model_name == "LL.4") {
-    eq <- paste0(
-      "Y = ", round(best_coefficients[2], 2), " + (", 
-      round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
-      ") / (1 + exp(", round(best_coefficients[1], 2), " * (log(X) - log(", round(best_coefficients[4], 2), "))))"
-    )
-  } else if (best_model_name == "LL.5") {
-    eq <- paste0(
-      "Y = ", round(best_coefficients[2], 2), " + (", 
-      round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
-      ") / (1 + exp(", round(best_coefficients[1], 2), " * (log(X) - log(", round(best_coefficients[4], 2), "))))^", 
-      round(best_coefficients[5], 2), ")"
-    )
-  } else if (best_model_name == "W1.4") {
-    eq <- paste0(
-      "Y = ", round(best_coefficients[2], 2), " + (", 
-      round(best_coefficients[3], 2), " - ", round(best_coefficients[2], 2), 
-      ") * exp(-exp(", round(best_coefficients[1], 2), " * (log(X) - log(", round(best_coefficients[4], 2), "))))"
-    )
-  } else {
-    eq <- "Unknown model type: Cannot generate equation."
-  }
-  
-  # generate data used to draw the curve
-  dose_seq <- seq(min(KE$conc_level), max(KE$conc_level), length.out = 100)
-  predicted_curve <- predict(best_model, newdata = data.frame(conc_level = dose_seq))
-  fit_data <- data.frame(dose = dose_seq, response = predicted_curve)
-  
-  # draw the fitted curve of the best model
-  plot <- ggplot() +
-    geom_point(data = KE, aes(x = conc_level, y = eg_score), color = "black", size = 3) +
-    geom_errorbar(
-      data = data_summary,
-      aes(x = conc_level, ymin = mean_response - se_response, ymax = mean_response + se_response),
-      width = 0.05, color = "black"
-    ) +
-    geom_line(data = fit_data, aes(x = dose, y = response), color = "red", size = 1) +
-    scale_x_log10() + 
-    labs(
-      title = paste("Module", module_number, ": ", key_event),
-      subtitle = paste0("\nEquation: ", eq),
-      x = "Concentration(µM)",
-      y = "EGs"
-    ) +
-    theme_minimal()
-  
-  print(plot)
-  
-  # output table
-  print(kable(model_metrics, caption = "Model Comparison (BIC & R²)"))
-  
-  return(list(model = best_model, equation = eq))
+
+  # output model fit index model
+  print(kable(model_metrics, caption = "Model Comparison"))
+
+  return(list(metrics = model_metrics, all_models = results, plots = plots))
 }
-
-
-
-
 
 ```
 
 ```{r}
-dose_response_analysis(277, 24, "Inhibition, mtETC Chain Complexes")
-# save the plot
-ggsave("277_24_LL.4.png", path = "C:/Users/ZTian/Desktop/RP1/data/model_plots")
+res <- dose_response_analysis(274, "Increased, binding of chemical to 2u")
+
+save_path <- "C:/Users/ZTian/Desktop/RP1/data/drm_selection/274/"
+dir.create(save_path, showWarnings = FALSE, recursive = TRUE)
+
+plots <- res$plots
+
+for (name in names(plots)) {
+  ggsave(
+    filename = paste0(save_path, name, ".png"),
+    plot = plots[[name]],
+    width =8, height = 6, dpi = 300
+  )
+}
+
+
 ```
-
-
 

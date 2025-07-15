@@ -1,0 +1,79 @@
+---
+title: "Modules analysis"
+output: html_document
+date: "2024-11-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+
+data_folder = "../data"
+function_folder = "../functions"
+source(paste0(function_folder, '/plots.R'))
+```
+
+```{r}
+module_table = read.delim(paste0(data_folder, '/moduleTable.txt'))
+nf_kb = module_table %>% dplyr::filter(module == 'hRPTECTERT1_159' & experiment %in% c(
+      'uploadFile1_GENTAMYCINluhumanrptectert1',
+      'uploadFile2_GENTAMYCINluhumanrptectert1',
+      'uploadFile3_GENTAMYCINluhumanrptectert1'))
+
+ggplot(data = nf_kb) + geom_point(aes(conc_level, eg_score)) +
+  geom_line(aes(conc_level, eg_score, colour = experiment, group = experiment)) + 
+  facet_wrap(~time) + 
+  theme_classic() + 
+  labs(title = 'EGs of module 159', x = "Concentration (uM)", y = "EGs") +
+  theme(legend.position = "none")
+```
+
+
+
+```{r}
+
+EGsofmodule("Increased, binding of chemical to 2u",274)
+ggsave("274(REP).png",path = "C:/Users/ZTian/Desktop/RP1/data/egsofmodule-plots")
+
+
+
+```
+```{r}
+# module 159
+# compare classic log2FC and log2FC per replicate
+## classic log2FC
+c_log2FC <- read.delim("../data/upload/DataFetchR_ConditionExport_TXGMAPr_20241108_105140 (1).txt")
+module_definition$gene_symbol <- gsub("^id_", "", module_definition$gene_symbol)
+module_definition$entrez_id <- gsub("^id_", "", module_definition$entrez_id)
+M159 <- c("AK4", "STC1", "EGLN1", "AHNAK2", "NR1H4", "TEX2", "LNPK", "FBX017", "BNIP3L")
+M159 <- as.data.frame(M159)
+M159 <- module_definition[module_definition$gene_symbol %in% M159$M159, c("gene_symbol", "entrez_id")]
+M159_C_LOG2FC <- c_log2FC[c_log2FC$gene_id %in% M159$entrez_id & c_log2FC$time == 24 & c_log2FC$conc == 500,]
+M159_C_LOG2FC <- merge(M159_C_LOG2FC, M159, by.x = "gene_id", by.y = "entrez_id", all.x = TRUE)
+M159_C_LOG2FC <- select(M159_C_LOG2FC, gene_symbol, time, conc, log2fc)
+write.csv(M159_C_LOG2FC, "M159_log2fc.csv", sep = "\t", row.names = FALSE, quote = FALSE)
+## log2FC per replicate
+r1_log2FC <- read.delim("../data/upload/log2FC_1.txt")
+M159_r1_log2FC <- r1_log2FC[r1_log2FC$gene_id %in% M159$gene_symbol & r1_log2FC$time == 24 & r1_log2FC$conc == 500,c("gene_id","time", "conc", "log2fc")]
+write.csv(M159_r1_log2FC, "M159_r1_log2fc.csv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+r2_log2FC <- read.delim("../data/upload/log2FC_2.txt")
+M159_r2_log2FC <- r2_log2FC[r2_log2FC$gene_id %in% M159$gene_symbol & r2_log2FC$time == 24 & r2_log2FC$conc == 500,c("gene_id","time", "conc", "log2fc")]
+write.csv(M159_r2_log2FC, "M159_r2_log2fc.csv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+```
+
+```{r}
+
+ggplot(M159_r2_log2FC, aes(x = gene_id, y = log2fc)) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Log2FC by Gene Symbol", x = "Gene Symbol", y = "Log2FC") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+

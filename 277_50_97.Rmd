@@ -1,0 +1,266 @@
+---
+title: "R-R: 277 + 50 -> 97"
+output: html_document
+date: "2025-07-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+```
+### use data predicted from dose-response models
+```{r}
+# 277, 50: MM.2, 97: LL.3
+# define LL.3 manually
+LL3_function <- function(dose, b, d, e) {
+  d / (1 + exp(b * (log(dose) - log(e))))
+}
+# define MM.2 manually
+MM2_function <- function(dose, d, e) {
+  d/(1 + (e/dose))
+}
+# define the range of dose
+# doses <- seq(100, 5000, by = 50)
+# doses <- 10^seq(log10(100), log10(5000), length.out = 50)
+# change to smaller range when plotting!!!! otherwise it's too large, the plots won't be beautifal
+doses <- 10^seq(log10(100), log10(5000), length.out = 50)
+
+# ceate an empty data frame
+response_df <- data.frame(dose = doses)
+
+# stimulate KE1 data(277), using MM.2 model
+response_df$KE1 <- MM2_function(doses, d = -33.31, e = 14683.08)
+
+# stimulate KE2 data(50), using MM.2 model
+response_df$KE2 <- MM2_function(doses, d = 3.32, e = 437.75)
+
+# stimulate KE3 data(97), using LL.3 model
+response_df$KE3 <- LL3_function(doses, b = -13.9, d = 1.7, e = 271.06)
+
+rownames(response_df) <- response_df[, 1] # set the first column as row names(dose)
+response_df <- response_df[, -1] # delete the first column
+
+print(response_df)
+```
+
+# examine the data, check if the predictor variables have a linear association with the response variable
+```{r}
+pairs(response_df, pch = 18, col = "steelblue")
+ggpairs(response_df)
+```
+
+# fit model
+```{r}
+model <- nls(KE3 ~ a / (1 + (b / KE1)^c) + d / (1 + (e / KE2)^f), data = response_df, start = list(a = -0.04, b = -0.68, c = 11.36, d = 1.88, e = 1.28, f = 21.36), control = nls.control(maxiter = 500, warnOnly = TRUE))
+summary(model)
+```
+
+#### The following two chunks were used to check how well the fitted model matches the data used for fitting.
+#### when dealing with complex models that are hard to fit, these plots help in selecting initial parameter estimates that closely align with the data used for fitting.
+```{r}
+# define function
+KE3_function <- function(KE1, KE2, a, b, n, c, d, m) {
+  a / (1 + (b / KE1)^n) + c / (1 + (d / KE2)^m)
+}
+
+# set parameters
+a <- -0.18
+b <- -0.68
+n <- 11.36
+c <- 1.88
+d <- 1.28
+m <- 21.35
+
+# predict KE3
+response_df <- response_df %>%
+  mutate(p_KE3 = KE3_function(KE1, KE2, a, b, n, c, d, m))
+
+print(response_df)
+```
+```{r}
+# plot1: KE1 vs KE3
+p1 <- ggplot() +
+  # predicted data
+  geom_point(data = response_df, aes(x = KE1, y = KE3, color = "drm", shape = "drm"), size = 2) +
+  # geom_smooth(data = response_df, aes(x = KE1, y = p_KE3), method = "loess", se = FALSE, color = "blue") +
+  geom_smooth(data = response_df, aes(x = KE1, y = p_KE3, color = "rrm", linetype = "rrm"), method = "gam", se = FALSE, color = "blue") + # smoother method
+  # experimental data
+  geom_point(data = response_df, aes(x = KE1, y = KE3, color = "Predicted from drm", shape = "Predicted from drm"), size = 2) +
+  scale_color_manual(name = "Data Type", values = c("Predicted" = "red", "Predicted from drm" = "red")) +
+  scale_shape_manual(name = "Data Type", values = c("Predicted" = 16, "Predicted from drm" = 1)) +
+  theme_minimal() +
+  # facet_zoom(y = p_KE3 < 10) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
+  labs(title = "KE1 vs KE3", x = "KE1", y = "KE3")
+
+# plot2: KE2 vs KE3
+p2 <- ggplot(response_df, aes(x = KE2)) +
+  # predicted data
+   geom_point(data = response_df, aes(x = KE2, y = KE3, color = "drm", shape = "drm"), size = 2) +
+  # geom_smooth(data = response_df, aes(x = KE2, y = p_KE3), method = "loess", se = FALSE, color = "blue") +
+  geom_smooth(data = response_df, aes(x = KE2, y = p_KE3, color = "rrm", linetype = "rrm"), method = "gam", se = FALSE, color = "blue") +
+  # experimental data
+  geom_point(data = response_df, aes(x = KE2, y = KE3, color = "Predicted from drm", shape = "Predicted from drm"), size = 2) +
+  scale_color_manual(name = "Data Type", values = c("Predicted" = "red", "Predicted from drm" = "red")) +
+  scale_shape_manual(name = "Data Type", values = c("Predicted" = 16, "Predicted from drm" = 1)) +
+  theme_minimal() +
+  # facet_zoom(y = p_KE3 < 10) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
+  labs(title = "KE2 vs KE3", x = "KE2", y = "KE3")
+
+# print plots
+print(p1)
+print(p2)
+```
+
+```{r}
+datafolder = "C:/Users/ZTian/Desktop/RP1/data/moduleTable.txt"
+module_table <- read.delim(datafolder)
+module_table <- module_table %>%
+  mutate(conc_level = case_when(
+    conc_level == 1 ~ 250,
+    conc_level == 2 ~ 500,
+    conc_level == 3 ~ 1000
+  ))
+KE1 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_277' & # Inhibition, mtETC Chain Complexes
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE1)
+
+  KE2 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_50' & # Increased, oxidative stress
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE2)
+  
+  KE3 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_97' & # Activation of ER stress
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE3)
+  
+  # simplify these data frame and merge them
+  KE1_filtered <- KE1 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score1 = eg_score)
+  
+  KE2_filtered <- KE2 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score2 = eg_score)
+  
+  KE3_filtered <- KE3 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score3 = eg_score)
+  
+  merged_data <- KE1_filtered %>%
+  full_join(KE2_filtered, by = c("experiment", "conc_level")) %>%
+  full_join(KE3_filtered, by = c("experiment", "conc_level"))
+  print(merged_data)
+```
+
+### final plotting
+```{r}
+# KE1: Inhibition, mtETC Chain Complexes--277
+# KE2: Increased, oxidative stress--50
+# KE3: Activation of ER stress--97
+# prepare the data frame used to draw error bars
+# RStudio's table view (View()) only displays rounded numbers, not the actual stored values.
+summarized_moduletable = module_table %>% filter(time == 24) %>%
+  # # remove outlier from error bar
+  # filter(!(module == "hRPTECTERT1_97" & conc_level == 1000 & 
+  #          startsWith(as.character(eg_score), "-0.527544"))) %>%
+  # filter(!(module == "hRPTECTERT1_264" & conc_level == 1000 & 
+  #          startsWith(as.character(eg_score), "0.035441"))) %>%
+  # filter(!(module == "hRPTECTERT1_71" & conc_level == 1000 & 
+  #          startsWith(as.character(eg_score), "0.647139"))) %>%
+  group_by(module, conc_level) %>%
+  summarize(mean_eg = mean(eg_score, na.rm = TRUE), SD_eg = sd(eg_score, na.rm = TRUE)) %>%
+  pivot_wider(names_from = module, values_from = c(mean_eg, SD_eg))
+# # remove outlier from experimental data points
+#   merged_data <- merged_data[-7, ]
+#   # filter(!(eg_score2 == -0.5275449 & eg_score3 == 0.6471399)), cannot delete the row due to floating-point precision
+
+# plot1: KE1 vs KE3
+p1 <- ggplot() +
+  # predicted data
+  geom_point(data = response_df, aes(x = KE1, y = KE3, color = "drm"), size = 2) +
+  # geom_line(data = response_df, aes(x = KE1, y = p_KE3), color = "blue", size = 1) +
+  # geom_smooth(data = response_df, aes(x = KE1, y = p_KE3), method = "gam", se = FALSE, color = "blue") +
+  geom_smooth(data = response_df, aes(x = KE1, y = p_KE3, color = "rrm", linetype = "rrm"), method = "gam", formula = y ~ s(x, k =50), se = FALSE, color = "blue") +
+  # experimental data points
+  geom_point(data = merged_data, aes(x = eg_score1, y = eg_score3, color = as.factor(conc_level)), alpha = 0.7) +
+  # error bar
+  geom_point(data = summarized_moduletable, aes(x = mean_eg_hRPTECTERT1_277, y = mean_eg_hRPTECTERT1_97, color = as.factor(conc_level)), size = 2) +
+  geom_errorbar(data = summarized_moduletable, aes(x = mean_eg_hRPTECTERT1_277,
+                    ymin = mean_eg_hRPTECTERT1_97 - SD_eg_hRPTECTERT1_97,
+                    ymax = mean_eg_hRPTECTERT1_97 + SD_eg_hRPTECTERT1_97,
+                    color = as.factor(conc_level)), width = 0.1) +
+  geom_errorbarh(data = summarized_moduletable, aes(y = mean_eg_hRPTECTERT1_97,
+                     xmin = mean_eg_hRPTECTERT1_277 - SD_eg_hRPTECTERT1_277,
+                     xmax = mean_eg_hRPTECTERT1_277 + SD_eg_hRPTECTERT1_277,
+                     color = as.factor(conc_level)), height = 0.1) +
+  
+  labs(title = "Inhibition, mtETC Chain Complexes VS Activation of ER stress", x = "Inhibition, mtETC Chain Complexes", y = "Activation of ER stress", color = "DOSE") +
+  # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
+  theme_minimal()
+
+# plot2: KE2 vs KE3
+p2 <- ggplot() +
+  # predicted data
+  geom_point(data = response_df, aes(x = KE2, y = KE3, color = "drm"), size = 2) +
+  # geom_line(data = response_df, aes(x = KE2, y = p_KE3), color = "blue", size = 1) +
+  # geom_smooth(data = response_df, aes(x = KE2, y = p_KE3), method = "gam", se = FALSE, color = "blue") + 
+  geom_smooth(data = response_df, aes(x = KE2, y = p_KE3, color = "rrm", linetype = "rrm"), method = "gam", formula = y ~ s(x, k = 50), se = FALSE, color = "blue") +
+  # experimental data points
+  geom_point(data = merged_data, aes(x = eg_score2, y = eg_score3, color = as.factor(conc_level)), alpha = 0.7) +
+  # error bar
+  geom_point(data = summarized_moduletable, aes(x = mean_eg_hRPTECTERT1_50, y = mean_eg_hRPTECTERT1_97, color = as.factor(conc_level)), size = 2) +
+  geom_errorbar(data = summarized_moduletable, aes(x = mean_eg_hRPTECTERT1_50,
+                    ymin = mean_eg_hRPTECTERT1_97 - SD_eg_hRPTECTERT1_97,
+                    ymax = mean_eg_hRPTECTERT1_97 + SD_eg_hRPTECTERT1_97,
+                    color = as.factor(conc_level)), width = 0.1) +
+  geom_errorbarh(data = summarized_moduletable, aes(y = mean_eg_hRPTECTERT1_97,
+                     xmin = mean_eg_hRPTECTERT1_50 - SD_eg_hRPTECTERT1_50,
+                     xmax = mean_eg_hRPTECTERT1_50 + SD_eg_hRPTECTERT1_50,
+                     color = as.factor(conc_level)), height = 0.1) +
+  
+  labs(title = "Increased, oxidative stress VS Activation of ER stress", x = "Increased, oxidative stress", y = "Activation of ER stress", color = "DOSE") +
+  # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
+  theme_minimal()
+# print plots
+print(p1)
+print(p2)
+```
+
+### save
+```{r}
+ggsave(filename = "../data/R_R/277_50_97/p1.pdf",
+       plot = p1,
+       width = 8,
+       height = 6,
+       dpi = 300)
+ggsave(filename = "../data/R_R/277_50_97/p2.pdf",
+       plot = p2,
+       width = 8,
+       height = 6,
+       dpi = 300)
+```
