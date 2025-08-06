@@ -221,7 +221,7 @@ p1 <- ggplot() +
   
   labs(title = "Inhibition, mtETC Chain Complexes VS Activation of ER stress", x = "Inhibition, mtETC Chain Complexes", y = "Activation of ER stress", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 
 # plot2: KE2 vs KE3
 p2 <- ggplot() +
@@ -245,7 +245,7 @@ p2 <- ggplot() +
   
   labs(title = "Increased, oxidative stress VS Activation of ER stress", x = "Increased, oxidative stress", y = "Activation of ER stress", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 # print plots
 print(p1)
 print(p2)

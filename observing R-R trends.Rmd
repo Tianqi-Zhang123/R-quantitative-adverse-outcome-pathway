@@ -25,18 +25,132 @@ module_table <- module_table %>%
 ```
 
 #### mean data
+# one-to-one
 ```{r}
-# look into the data to determine which model should be used
-summarized_moduletable = module_table %>% filter(time == 24) %>%
+# extract data of 24h
+module_table_24h <- module_table %>% filter(time == 24)
+
+# summarize data
+summarized_moduletable <- module_table_24h %>%
   group_by(module, conc_level) %>%
   summarize(mean_eg = mean(eg_score, na.rm = TRUE), SD_eg = sd(eg_score, na.rm = TRUE)) %>%
   pivot_wider(names_from = module, values_from = c(mean_eg, SD_eg))
 
-ggplot(summarized_moduletable, aes(x = mean_eg_hRPTECTERT1_50, y = mean_eg_hRPTECTERT1_264, color = as.factor(conc_level))) +
-  geom_point() +
-  geom_errorbar(aes(ymin = mean_eg_hRPTECTERT1_264 - SD_eg_hRPTECTERT1_264, ymax = mean_eg_hRPTECTERT1_264 + SD_eg_hRPTECTERT1_264), width = 0.1) +
-  geom_errorbarh(aes(xmin = mean_eg_hRPTECTERT1_50 - SD_eg_hRPTECTERT1_50, xmax = mean_eg_hRPTECTERT1_50 + SD_eg_hRPTECTERT1_50), height = 0.1) +
-  labs(title = "Increased, oxidative stress VS Increased, Lipid peroxidation", x = "EGs module 50", y = "EGs module 264", color = "DOSE") +
+# plot
+ggplot() +
+  # exprimental data
+  geom_point(data = module_table_24h %>% 
+               filter(module %in% c("hRPTECTERT1_50", "hRPTECTERT1_264")) %>% 
+               pivot_wider(names_from = module, values_from = eg_score),
+             aes(x = hRPTECTERT1_50, y = hRPTECTERT1_264, color = as.factor(conc_level)),
+             alpha = 0.4, size = 2) +
+  
+  # mean data
+  geom_point(data = summarized_moduletable,
+             aes(x = mean_eg_hRPTECTERT1_50, y = mean_eg_hRPTECTERT1_264, color = as.factor(conc_level)),
+             size = 4) +
+  
+  # vertical error bar
+  geom_errorbar(data = summarized_moduletable,
+                aes(x = mean_eg_hRPTECTERT1_50,
+                    ymin = mean_eg_hRPTECTERT1_264 - SD_eg_hRPTECTERT1_264,
+                    ymax = mean_eg_hRPTECTERT1_264 + SD_eg_hRPTECTERT1_264,
+                    color = as.factor(conc_level)),
+                width = 0.1) +
+  
+  # horizontal error bar
+  geom_errorbarh(data = summarized_moduletable,
+                 aes(y = mean_eg_hRPTECTERT1_264,
+                     xmin = mean_eg_hRPTECTERT1_50 - SD_eg_hRPTECTERT1_50,
+                     xmax = mean_eg_hRPTECTERT1_50 + SD_eg_hRPTECTERT1_50,
+                     color = as.factor(conc_level)),
+                 height = 0.1) +
+  
+  labs(title = "Increased, oxidative stress VS Increased, Lipid peroxidation",
+       x = "EGs module 50", y = "EGs module 264", color = "DOSE") +
   theme_minimal()
+
+```
+
+# multiple-to-one
+```{r}
+# extract data of 24h
+module_table_24h <- module_table %>% filter(time == 24)
+
+# summarize data
+summarized_moduletable <- module_table_24h %>%
+  group_by(module, conc_level) %>%
+  summarize(mean_eg = mean(eg_score, na.rm = TRUE), SD_eg = sd(eg_score, na.rm = TRUE)) %>%
+  pivot_wider(names_from = module, values_from = c(mean_eg, SD_eg))
+
+p1 <- ggplot() +
+  # exprimental data
+  geom_point(data = module_table_24h %>% 
+               filter(module %in% c("hRPTECTERT1_264", "hRPTECTERT1_71")) %>% 
+               #pivot_wider(names_from = module, values_from = eg_score),
+             aes(x = hRPTECTERT1_264, y = hRPTECTERT1_71, color = as.factor(conc_level)),
+             alpha = 0.4, size = 2) +
+  
+  # mean data
+  geom_point(data = summarized_moduletable,
+             aes(x = mean_eg_hRPTECTERT1_264, y = mean_eg_hRPTECTERT1_71, color = as.factor(conc_level)),
+             size = 3) +
+  
+  # vertical error bar
+  geom_errorbar(data = summarized_moduletable,
+                aes(x = mean_eg_hRPTECTERT1_264,
+                    ymin = mean_eg_hRPTECTERT1_71 - SD_eg_hRPTECTERT1_71,
+                    ymax = mean_eg_hRPTECTERT1_71 + SD_eg_hRPTECTERT1_71,
+                    color = as.factor(conc_level)),
+                width = 0.1) +
+  
+  # horizontal error bar
+  geom_errorbarh(data = summarized_moduletable,
+                 aes(y = mean_eg_hRPTECTERT1_71,
+                     xmin = mean_eg_hRPTECTERT1_264 - SD_eg_hRPTECTERT1_264,
+                     xmax = mean_eg_hRPTECTERT1_264 + SD_eg_hRPTECTERT1_264,
+                     color = as.factor(conc_level)),
+                 height = 0.1) +
+  
+  labs(title = "Increased, Lipid peroxidation vs Increase, Apoptosis",
+       x = "Increased, Lipid peroxidation",
+       y = "Increase, Apoptosis",
+       color = "DOSE") +
+  theme_minimal()
+
+
+p2 <- ggplot() +
+  geom_point(data = module_table_24h %>% 
+               filter(module %in% c("hRPTECTERT1_97", "hRPTECTERT1_71")) %>% 
+               pivot_wider(names_from = module, values_from = eg_score),
+             aes(x = hRPTECTERT1_97, y = hRPTECTERT1_71, color = as.factor(conc_level)),
+             alpha = 0.4, size = 2) +
+
+  geom_point(data = summarized_moduletable,
+             aes(x = mean_eg_hRPTECTERT1_97, y = mean_eg_hRPTECTERT1_71, color = as.factor(conc_level)),
+             size = 3) +
+
+  geom_errorbar(data = summarized_moduletable,
+                aes(x = mean_eg_hRPTECTERT1_97,
+                    ymin = mean_eg_hRPTECTERT1_71 - SD_eg_hRPTECTERT1_71,
+                    ymax = mean_eg_hRPTECTERT1_71 + SD_eg_hRPTECTERT1_71,
+                    color = as.factor(conc_level)),
+                width = 0.1) +
+
+  geom_errorbarh(data = summarized_moduletable,
+                 aes(y = mean_eg_hRPTECTERT1_71,
+                     xmin = mean_eg_hRPTECTERT1_97 - SD_eg_hRPTECTERT1_97,
+                     xmax = mean_eg_hRPTECTERT1_97 + SD_eg_hRPTECTERT1_97,
+                     color = as.factor(conc_level)),
+                 height = 0.1) +
+
+  labs(title = "Activation of ER stress vs Increase, Apoptosis",
+       x = "Activation of ER stress",
+       y = "Increase, Apoptosis",
+       color = "DOSE") +
+  theme_minimal()
+
+print(p1)
+print(p2)
 ```
 

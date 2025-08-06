@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyr)
 library(ggplot2)
 library(dplyr)
+library(minpack.lm)
+
 ```
 #### 50 + 98 + 155 = 159
 # KE1: Increased, oxidative stress--50
@@ -283,7 +285,7 @@ p1 <- ggplot() +
   
   labs(title = "Increased, oxidative stress VS Increase, Cytotoxicity", x = "Increased, oxidative stress", y = "Increase, Cytotoxicity", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 
 # plot2: KE2 vs KE3
 p2 <- ggplot() +
@@ -305,7 +307,7 @@ p2 <- ggplot() +
   
   labs(title = "Binding of substrate, endocytic receptor VS Increase, Cytotoxicity", x = "Binding of substrate, endocytic receptor", y = "Increase, Cytotoxicity", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 
 p3 <- ggplot() +
   # predicted data
@@ -326,7 +328,7 @@ p3 <- ggplot() +
   
   labs(title = "Alkylation, protein VS Increase, Cytotoxicity", x = "Alkylation, protein", y = "Increase, Cytotoxicity", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 # print plots
 print(p1)
 print(p2)

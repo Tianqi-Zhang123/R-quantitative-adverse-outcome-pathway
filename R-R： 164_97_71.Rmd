@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyr)
 library(ggplot2)
 library(dplyr)
+library(GGally)
+
 ```
 
 
@@ -31,9 +33,9 @@ MM3_function <- function(dose, c, d, e) {
   c + (d - c)/(1 + (e/dose))
 }
 # define the range of dose, for model fitting
-# doses <- 10^seq(log10(100), log10(40000000), length.out = 500)
+doses <- 10^seq(log10(100), log10(40000000), length.out = 500)
 # change to smaller range when plotting!!!! otherwise it's too large, the plots won't be beautifal
-doses <- 10^seq(log10(100), log10(5000), length.out = 50)
+# doses <- 10^seq(log10(100), log10(5000), length.out = 50)
 
 # ceate an empty data frame
 response_df <- data.frame(dose = doses)
@@ -60,7 +62,13 @@ print(response_df)
 # examine the data, check if the predictor variables have a linear association with the response variable
 ```{r}
 pairs(response_df, pch = 18, col = "steelblue")
-ggpairs(response_df)
+pa <- ggpairs(response_df) +
+  theme(text = element_text(size = 14))
+ggsave(filename = "../data/MM/ggpairs.pdf",
+       plot = pa,
+       width = 8,
+       height = 6,
+       dpi = 300)
 ```
 
 # fit model
@@ -91,34 +99,46 @@ print(response_df)
 # plot1: KE1 vs KE3
 p1 <- ggplot() +
   # predicted data
-  geom_point(data = response_df, aes(x = KE1, y = p_KE3, color = "Predicted", shape = "Predicted"), size = 2) +
+  geom_point(data = response_df, aes(x = KE1, y = p_KE3, color = "Predicted from cm", shape = "Predicted from cm"), size = 2) +
   # geom_smooth(data = response_df, aes(x = KE1, y = p_KE3), method = "loess", se = FALSE, color = "blue") +
   geom_smooth(data = response_df, aes(x = KE1, y = p_KE3), method = "gam", se = FALSE, color = "blue") + # smoother method
   # experimental data
   geom_point(data = response_df, aes(x = KE1, y = KE3, color = "Predicted from drm", shape = "Predicted from drm"), size = 2) +
-  scale_color_manual(name = "Data Type", values = c("Predicted" = "red", "Predicted from drm" = "red")) +
-  scale_shape_manual(name = "Data Type", values = c("Predicted" = 16, "Predicted from drm" = 1)) +
+  scale_color_manual(name = "Data Type", values = c("Predicted from cm" = "red", "Predicted from drm" = "red")) +
+  scale_shape_manual(name = "Data Type", values = c("Predicted from cm" = 16, "Predicted from drm" = 1)) +
   theme_minimal() +
+  theme(text = element_text(size = 16)) +
   #facet_zoom(y = p_KE3 < 30) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
   labs(title = "KE1 vs KE3", x = "KE1", y = "KE3")
 
 # plot2: KE2 vs KE3
 p2 <- ggplot(response_df, aes(x = KE2)) +
   # predicted data
-   geom_point(data = response_df, aes(x = KE2, y = p_KE3, color = "Predicted", shape = "Predicted"), size = 2) +
+   geom_point(data = response_df, aes(x = KE2, y = p_KE3, color = "Predicted from cm", shape = "Predicted from cm"), size = 2) +
   # geom_smooth(data = response_df, aes(x = KE2, y = p_KE3), method = "loess", se = FALSE, color = "blue") +
   geom_smooth(data = response_df, aes(x = KE2, y = p_KE3), method = "gam", se = FALSE, color = "blue") +
   # experimental data
   geom_point(data = response_df, aes(x = KE2, y = KE3, color = "Predicted from drm", shape = "Predicted from drm"), size = 2) +
-  scale_color_manual(name = "Data Type", values = c("Predicted" = "red", "Predicted from drm" = "red")) +
-  scale_shape_manual(name = "Data Type", values = c("Predicted" = 16, "Predicted from drm" = 1)) +
+  scale_color_manual(name = "Data Type", values = c("Predicted from cm" = "red", "Predicted from drm" = "red")) +
+  scale_shape_manual(name = "Data Type", values = c("Predicted from cm" = 16, "Predicted from drm" = 1)) +
   theme_minimal() +
+  theme(text = element_text(size = 16)) +
   # facet_zoom(y = p_KE3 < 30) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
   labs(title = "KE2 vs KE3", x = "KE2", y = "KE3")
 
 # print plots
 print(p1)
 print(p2)
+ggsave(filename = "../data/MM/p1.pdf",
+       plot = p1,
+       width = 8,
+       height = 5,
+       dpi = 300)
+ggsave(filename = "../data/MM/p2.pdf",
+       plot = p2,
+       width = 8,
+       height = 5,
+       dpi = 300)
 ```
 
 ### extract experimental data # for error bar in plots
@@ -226,7 +246,7 @@ p1 <- ggplot() +
   
   labs(title = "Increased, Lipid peroxidation VS Increase, Apoptosis", x = "Increased, Lipid peroxidation", y = "Increase, Apoptosis", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 
 # plot2: KE2 vs KE3
 p2 <- ggplot() +
@@ -248,7 +268,7 @@ p2 <- ggplot() +
   
   labs(title = "Activation of ER stress VS Increase, Apoptosis", x = "Activation of ER stress", y = "Increase, Apoptosis", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 # print plots
 print(p1)
 print(p2)

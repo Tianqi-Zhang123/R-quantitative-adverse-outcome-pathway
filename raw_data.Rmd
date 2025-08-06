@@ -57,7 +57,7 @@ size <- RAWclean %>%
 # size$sample_name <- gsub('_P[0-9]+|_N[0-9]+|_H[0-9]+|_A[0-9]+|_B[0-9]', '', size$sample_name)
 
 # We make a bar plot using ggplot of the sample sizes with the threshold as red horizontal line for quick interpretation
-ggplot(data = size, mapping = aes(x = sample_name, y = sample_size)) +
+p <- ggplot(data = size, mapping = aes(x = sample_name, y = sample_size)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1)) +
@@ -84,6 +84,11 @@ raw_data_fsample = RAWclean %>% select(-all_of(bad_samples %>% pull(sample_name)
 #print the output
 bad_samples %>%
   str()
+ggsave(filename = "../data/data preprocessing/QC.pdf",
+       plot = p,
+       width = 10,
+       height = 6,
+       dpi = 300)
 ```
 #filter low-expressed genes
 ```{r}

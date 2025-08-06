@@ -378,7 +378,7 @@ p1 <- ggplot() +
   
   labs(title = "Increase, Cytotoxicity VS Increase, Regenerative cell proliferation", x = "Increase, Cytotoxicity", y = "Increase, Regenerative cell proliferation", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 print(p1)
 ```
 ### save
@@ -494,7 +494,7 @@ p2 <- ggplot() +
   
   labs(title = "Inhibition, mtETC Chain Complexes VS Increase, NF-kb", x = "Inhibition, mtETC Chain Complexes", y = "Increase, NF-kb", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 print(p2)
 ```
 ### save
@@ -624,7 +624,7 @@ p3 <- ggplot() +
   
   labs(title = "Increased, oxidative stress VS Increased, Lipid peroxidation", x = "Increased, oxidative stress", y = "Increased, Lipid peroxidation", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 print(p3)
 ```
 

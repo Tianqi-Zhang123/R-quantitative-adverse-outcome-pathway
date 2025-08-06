@@ -17,19 +17,61 @@ source(paste0(function_folder, '/plots.R'))
 ```
 
 ```{r}
-module_table = read.delim(paste0(data_folder, '/moduleTable.txt'))
-nf_kb = module_table %>% dplyr::filter(module == 'hRPTECTERT1_159' & experiment %in% c(
+library(dplyr)
+library(ggplot2)
+
+# 读取数据
+module_table <- read.delim(paste0(data_folder, '/moduleTable.txt'))
+
+# 筛选数据
+ke <- module_table %>% 
+  dplyr::filter(
+    module == 'hRPTECTERT1_189' & 
+    experiment %in% c(
       'uploadFile1_GENTAMYCINluhumanrptectert1',
       'uploadFile2_GENTAMYCINluhumanrptectert1',
-      'uploadFile3_GENTAMYCINluhumanrptectert1'))
+      'uploadFile3_GENTAMYCINluhumanrptectert1'
+    )
+  )
 
-ggplot(data = nf_kb) + geom_point(aes(conc_level, eg_score)) +
-  geom_line(aes(conc_level, eg_score, colour = experiment, group = experiment)) + 
-  facet_wrap(~time) + 
-  theme_classic() + 
-  labs(title = 'EGs of module 159', x = "Concentration (uM)", y = "EGs") +
-  theme(legend.position = "none")
+# 新增rep变量（用于美化legend）
+ke$rep <- factor(
+  ke$experiment,
+  levels = c(
+    'uploadFile1_GENTAMYCINluhumanrptectert1',
+    'uploadFile2_GENTAMYCINluhumanrptectert1',
+    'uploadFile3_GENTAMYCINluhumanrptectert1'
+  ),
+  labels = c('rep1', 'rep2', 'rep3')
+)
+
+# 绘图
+p <- ggplot(data = ke) +
+  geom_point(aes(conc_level, eg_score, color = rep)) +
+  geom_line(aes(conc_level, eg_score, color = rep, group = rep)) +
+  facet_wrap(~time) +
+  theme_classic(base_size = 16) +
+  labs(
+    title = 'EGs of module 189: Disruption, lysosome',
+    x = "Concentration (uM)",
+    y = "EGs",
+    color = "Replicate"
+  ) +
+  theme(legend.position = "right")
+
+print(p)
+
+
 ```
+```{r}
+# print
+ggsave(filename = "../data/replicate_trends/189.pdf",
+       plot = p,
+       width = 10,
+       height = 6,
+       dpi = 300)
+```
+
 
 
 

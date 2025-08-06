@@ -47,6 +47,68 @@ response_df <- response_df[, -1] # delete the first column
 
 print(response_df)
 ```
+### extract experimental data # for error bar in plots
+```{r}
+datafolder = "C:/Users/ZTian/Desktop/RP1/data/moduleTable.txt"
+module_table <- read.delim(datafolder)
+module_table <- module_table %>%
+  mutate(conc_level = case_when(
+    conc_level == 1 ~ 250,
+    conc_level == 2 ~ 500,
+    conc_level == 3 ~ 1000
+  ))
+KE1 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_277' & 
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE1)
+
+  KE2 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_239' & 
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE2)
+  
+  KE3 <- module_table %>% dplyr::filter(
+    module == 'hRPTECTERT1_50' & 
+      time == 24 &
+      experiment %in% c(
+        'uploadFile1_GENTAMYCINluhumanrptectert1',
+        'uploadFile2_GENTAMYCINluhumanrptectert1',
+        'uploadFile3_GENTAMYCINluhumanrptectert1'
+      )
+  )
+  print(KE3)
+  
+  # simplify these data frame and merge them
+  KE1_filtered <- KE1 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score1 = eg_score)
+  
+  KE2_filtered <- KE2 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score2 = eg_score)
+  
+  KE3_filtered <- KE3 %>%
+    select(experiment, conc_level, eg_score) %>%
+    rename(eg_score3 = eg_score)
+  
+  merged_data <- KE1_filtered %>%
+  full_join(KE2_filtered, by = c("experiment", "conc_level")) %>%
+  full_join(KE3_filtered, by = c("experiment", "conc_level"))
+  print(merged_data)
+
+```
 
 # examine the data, check if the predictor variables have a linear association with the response variable
 ```{r}
@@ -158,7 +220,7 @@ p1 <- ggplot() +
   
   labs(title = "Inhibition, mtETC Chain Complexes VS Increased, oxidative stress", x = "Inhibition, mtETC Chain Complexes", y = "Increased, oxidative stress", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 
 # plot2: KE2 vs KE3
 p2 <- ggplot() +
@@ -180,7 +242,7 @@ p2 <- ggplot() +
   
   labs(title = "Binding, Thiol/seleno proteins VS Increased, oxidative stress", x = "Binding, Thiol/seleno proteins", y = "Increased, oxidative stress", color = "DOSE") +
   # facet_zoom(y = p_KE3 < 25) + # if there are extreme data, plot will be strange. This is to exclude extreme data from plot
-  theme_minimal()
+  theme_minimal(base_size = 14)
 # print plots
 print(p1)
 print(p2)
