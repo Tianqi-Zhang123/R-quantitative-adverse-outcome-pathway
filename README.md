@@ -1,6 +1,6 @@
 # Project Overview
 
-This repository provides code and resources for developing a quantitative Adverse Outcome Pathway (qAOP). The pipeline integrates data preprocessing, model fitting, visualization, and evaluation using various R scripts and software tools.
+This repository provides code and resources for developing a quantitative Adverse Outcome Pathway (qAOP). The pipeline integrates data preprocessing, model fitting, visualization, and evaluation using various R scripts and software tools. Please review the file together with the thesis for context.
 
 ---
 
